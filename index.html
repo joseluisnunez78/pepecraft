@@ -1,0 +1,2166 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PepeCraft</title>
+  <meta name="description" content="Explora un mundo de bloques en realidad virtual o en el ordenador.">
+  <!-- Icono: una moneda dorada con una P, dibujada en SVG dentro del propio archivo -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='29' fill='%23f5b82e' stroke='%23b9800f' stroke-width='5'/%3E%3Ctext x='32' y='44' font-family='Arial' font-weight='bold' font-size='34' text-anchor='middle' fill='%23ffffff'%3EP%3C/text%3E%3C/svg%3E">
+
+  <!-- A-Frame 1.7.0 (incluye Three.js). Versión fijada para que nada cambie sin avisar. -->
+  <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
+
+  <style>
+    /* ===== Colores de PepeCraft (sección 8 de la ficha) ===== */
+    :root {
+      --cielo-arriba: #4aa3ff;
+      --cielo-abajo: #ffc59a;
+      --hierba: #8fd14f;
+      --tierra: #a86b3c;
+      --oro: #f5b82e;
+      --oro-oscuro: #b9800f;
+      --texto: #22303f;
+      --tarjeta: rgba(255, 255, 255, 0.88);
+    }
+    html, body { margin: 0; height: 100%; overflow: hidden; font-family: system-ui, "Segoe UI", Roboto, Arial, sans-serif; color: var(--texto); background: linear-gradient(var(--cielo-arriba), var(--cielo-abajo)); }
+
+    /* Pantalla de inicio: una tarjeta encima del mundo, que se ve de fondo */
+    /* overflow + margin: auto: en pantallas bajitas (móvil tumbado) la tarjeta se desplaza en vez de cortarse */
+    #inicio {
+      position: fixed; inset: 0; z-index: 10;
+      display: flex; overflow-y: auto;
+      padding: 16px; box-sizing: border-box;
+      background: linear-gradient(rgba(74, 163, 255, 0.25), rgba(255, 197, 154, 0.35));
+    }
+    #inicio.oculto { display: none; }
+    .tarjeta {
+      width: 100%; max-width: 380px; box-sizing: border-box; margin: auto;
+      background: var(--tarjeta); border-radius: 20px; padding: 24px 20px;
+      box-shadow: 0 10px 30px rgba(34, 48, 63, 0.25); text-align: center;
+    }
+    .logo {
+      width: 64px; height: 64px; margin: 0 auto 8px; border-radius: 50%;
+      background: var(--oro); border: 5px solid var(--oro-oscuro); box-sizing: border-box;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 800; font-size: 32px;
+    }
+    h1 { margin: 0 0 4px; font-size: 2.2rem; letter-spacing: 1px; }
+    h1 span { color: #5aa02c; }
+    .record { margin: 0 0 20px; font-size: 1rem; }
+    .record strong { font-variant-numeric: tabular-nums; }
+    .botones { display: flex; flex-direction: column; gap: 10px; }
+    button {
+      font: inherit; font-weight: 700; font-size: 1.05rem; cursor: pointer;
+      border: none; border-radius: 12px; padding: 14px 16px; min-height: 48px;
+    }
+    .principal { background: var(--hierba); color: #183a07; box-shadow: 0 4px 0 #5aa02c; }
+    .secundario { background: var(--cielo-arriba); color: #fff; box-shadow: 0 4px 0 #2a6fc0; }
+    button:active:not(:disabled) { transform: translateY(2px); box-shadow: none; }
+    button:disabled { cursor: not-allowed; background: #d9dee4; color: #7a8592; box-shadow: none; }
+    .fila { display: flex; gap: 10px; }
+    .fila button { flex: 1; font-size: 0.95rem; }
+    .nota { margin: 14px 0 0; font-size: 0.8rem; color: #4b5866; }
+
+    /* Ayuda de controles y aviso del ratón (solo en el ordenador) */
+    #ayuda {
+      position: fixed; left: 12px; bottom: 12px; z-index: 5;
+      background: rgba(34, 48, 63, 0.7); color: #fff; border-radius: 10px;
+      padding: 8px 12px; font-size: 0.85rem; display: none;
+    }
+    #aviso-raton {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 5;
+      background: rgba(34, 48, 63, 0.75); color: #fff; border-radius: 12px;
+      padding: 12px 16px; display: none; pointer-events: none; text-align: center;
+    }
+    /* Marcador del ordenador, arriba en el centro */
+    #marcador {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 5; display: none;
+      background: rgba(34, 48, 63, 0.7); color: #fff; border-radius: 12px;
+      padding: 6px 16px; text-align: center; max-width: calc(100% - 32px); box-sizing: border-box;
+      font-variant-numeric: tabular-nums; pointer-events: none;
+    }
+    #marc-grande { font-size: 1.5rem; font-weight: 800; }
+    #marc-pequeno { font-size: 0.85rem; }
+    /* Panel de fin de partida (en el ordenador) */
+    #fin {
+      position: fixed; inset: 0; z-index: 11;
+      display: flex; overflow-y: auto;
+      padding: 16px; box-sizing: border-box; background: rgba(34, 48, 63, 0.35);
+    }
+    #fin.oculto { display: none; }
+    h2 { margin: 0 0 8px; font-size: 1.8rem; }
+
+    @media (max-height: 520px) {
+      .tarjeta { padding: 14px 16px; }
+      .logo { width: 44px; height: 44px; font-size: 22px; border-width: 4px; }
+      h1 { font-size: 1.7rem; }
+      .record { margin-bottom: 10px; }
+    }
+  </style>
+
+  <script>
+    /* =========================================================
+       1. CONSTANTES Y ESTADO CENTRAL DEL JUEGO
+       ========================================================= */
+    const TAM = 64;          // el mundo mide 64 x 64 columnas
+    const ALTO = 16;         // altura máxima de bloques
+    const NIVEL_AGUA = 5;    // por debajo de esta altura hay agua
+    const CLAVE_GUARDADO = 'pepecraft-guardado';
+    // Salto: gravedad (m/s²), impulso del salto y del doble salto (m/s) y escalón que se sube andando (m)
+    const GRAVEDAD = 20, SALTO = 7.2, SALTO_DOBLE = 8.5, PASO = 1.05;
+
+    // Tipos de bloque: el número es el que se guarda en el mundo
+    const AIRE = 0, HIERBA = 1, TIERRA = 2, PIEDRA = 3, AGUA = 4;
+    const TIPOS = {
+      [HIERBA]: { nombre: 'hierba', color: '#8fd14f' },
+      [TIERRA]: { nombre: 'tierra', color: '#a86b3c' },
+      [PIEDRA]: { nombre: 'piedra', color: '#7f8fa6' },
+      [AGUA]:   { nombre: 'agua',   color: '#2ec4c4', transparente: true }
+    };
+
+    // Todo lo que pasa en la partida vive aquí
+    const estado = {
+      jugando: false,
+      modo: null,               // 'ordenador' o 'vr'
+      salud: 5,                 // vidas que le quedan a Pepe
+      monedas: 0,
+      tiempo: 0,                // segundos de partida
+      protegidoHasta: 0,        // tras un ataque, segundo hasta el que Pepe no recibe daño
+      copaHasta: 0,             // segundo de partida en que se acaba el salto doble de la copa (0 = sin copa)
+      fin: null,                // null mientras se juega; 'ganado' o 'perdido' al terminar
+      finEn: 0,                 // cuándo terminó (para no reiniciar sin querer)
+      herramienta: 'martillo',  // 'martillo' o 'espada'
+      semilla: 0,               // número que decide cómo es el terreno
+      bloquesRotos: [],         // lista de [x, y, z] quitados con el martillo
+      mejorTiempo: null         // récord en segundos, o null si no hay
+    };
+
+    /* =========================================================
+       2. GUARDAR Y CARGAR (localStorage, en formato JSON)
+       ========================================================= */
+    // Normalmente guarda el mundo actual; al perder se le pasa una semilla nueva y sin agujeros
+    function guardar(semilla = estado.semilla, bloquesRotos = estado.bloquesRotos) {
+      try {
+        localStorage.setItem(CLAVE_GUARDADO, JSON.stringify({
+          semilla,
+          bloquesRotos,
+          mejorTiempo: estado.mejorTiempo
+        }));
+      } catch (e) { /* si el navegador no deja guardar, seguimos sin guardar */ }
+    }
+
+    // Lee el guardado y comprueba que es válido. Si no lo es, empieza un mundo nuevo.
+    function cargar() {
+      let datos = null;
+      try { datos = JSON.parse(localStorage.getItem(CLAVE_GUARDADO)); } catch (e) { datos = null; }
+      const esEntero = (n, max) => Number.isInteger(n) && n >= 0 && n < max;
+      const valido = datos && typeof datos === 'object' &&
+        Number.isInteger(datos.semilla) &&
+        Array.isArray(datos.bloquesRotos) &&
+        datos.bloquesRotos.every(b => Array.isArray(b) && b.length === 3 &&
+          esEntero(b[0], TAM) && esEntero(b[1], ALTO) && esEntero(b[2], TAM)) &&
+        (datos.mejorTiempo === null || (Number.isFinite(datos.mejorTiempo) && datos.mejorTiempo > 0 && datos.mejorTiempo < 1e7));
+      if (valido) {
+        estado.semilla = datos.semilla;
+        estado.bloquesRotos = datos.bloquesRotos;
+        estado.mejorTiempo = datos.mejorTiempo;
+      } else {
+        estado.semilla = Math.floor(Math.random() * 1e9);
+        estado.bloquesRotos = [];
+        estado.mejorTiempo = null;
+      }
+    }
+    cargar();
+
+    // Convierte segundos en "m:ss"
+    function formatoTiempo(s) {
+      if (s === null) return '—';
+      const m = Math.floor(s / 60), r = Math.floor(s % 60);
+      return m + ':' + String(r).padStart(2, '0');
+    }
+
+    /* =========================================================
+       3. AZAR CON SEMILLA Y RUIDO (para colinas y valles)
+       ========================================================= */
+    // Generador de números al azar que siempre da la misma serie con la misma semilla
+    function crearAzar(semilla) {
+      let a = semilla >>> 0;
+      return function () {
+        a = (a + 0x6D2B79F5) >>> 0;
+        let t = a;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    // Ruido de valores: una rejilla de números al azar que se mezclan suavemente
+    function crearRuido(semilla) {
+      const azar = crearAzar(semilla);
+      const N = 256;
+      const valores = new Float32Array(N * N);
+      for (let i = 0; i < valores.length; i++) valores[i] = azar();
+      const v = (x, y) => valores[(x & 255) + (y & 255) * N];
+      const suave = t => t * t * (3 - 2 * t);
+      return function (x, y) {
+        const x0 = Math.floor(x), y0 = Math.floor(y);
+        const fx = suave(x - x0), fy = suave(y - y0);
+        const a = v(x0, y0), b = v(x0 + 1, y0), c = v(x0, y0 + 1), d = v(x0 + 1, y0 + 1);
+        return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy; // entre 0 y 1
+      };
+    }
+
+    /* =========================================================
+       3b. TEXTURAS PIXELADAS PROPIAS (16 x 16, dibujadas por código)
+       ========================================================= */
+    // Color en formato HSL: tono (0-360), saturación y luminosidad (en %)
+    const hsl = (h, s, l) => 'hsl(' + h + ',' + s + '%,' + Math.round(l) + '%)';
+
+    // Crea una textura: "dibujar" pinta píxel a píxel con un azar con semilla (siempre sale igual)
+    function crearTextura(semilla, ancho, dibujar) {
+      const lienzo = document.createElement('canvas');
+      lienzo.width = ancho; lienzo.height = 16;
+      const ctx = lienzo.getContext('2d');
+      const azar = crearAzar(semilla);
+      const px = (x, y, color) => { ctx.fillStyle = color; ctx.fillRect(x, y, 1, 1); };
+      dibujar(px, azar);
+      const t = new THREE.CanvasTexture(lienzo);
+      t.magFilter = t.minFilter = THREE.NearestFilter;  // píxeles nítidos, sin suavizar
+      t.generateMipmaps = false;
+      t.colorSpace = THREE.SRGBColorSpace;
+      return t;
+    }
+
+    // Tierra con piedrecitas, empezando en la columna ox del lienzo
+    function pintarTierra(px, azar, ox) {
+      for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) px(ox + x, y, hsl(26, 45, 31 + azar() * 10));
+      for (let i = 0; i < 8; i++) px(ox + Math.floor(azar() * 16), Math.floor(azar() * 16), hsl(30, 8, 48 + azar() * 18));
+    }
+
+    const TEX = {
+      // Hierba: un "atlas" de 48 x 16 con 3 dibujos: arriba | lado | abajo
+      hierba: () => crearTextura(11, 48, (px, azar) => {
+        for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+          const r = azar();
+          px(x, y, r < 0.12 ? hsl(84, 70, 64) : r < 0.22 ? hsl(96, 55, 33) : hsl(88, 58, 42 + azar() * 9));  // briznas
+        }
+        pintarTierra(px, azar, 16);
+        for (let x = 0; x < 16; x++) {   // borde verde e irregular encima de la tierra
+          const h = 2 + Math.floor(azar() * 3);
+          for (let y = 0; y < h; y++) px(16 + x, y, hsl(88, 58, 40 + azar() * 10));
+          if (azar() < 0.4) px(16 + x, h, hsl(96, 55, 32));
+        }
+        pintarTierra(px, azar, 32);
+      }),
+      tierra: () => crearTextura(22, 16, (px, azar) => pintarTierra(px, azar, 0)),
+      // Piedra gris azulada con grietas
+      piedra: () => crearTextura(33, 16, (px, azar) => {
+        for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) px(x, y, hsl(215, 14, 52 + azar() * 10));
+        for (let g = 0; g < 3; g++) {
+          let x = Math.floor(azar() * 16), y = Math.floor(azar() * 16);
+          for (let p = 0; p < 6; p++) {
+            px(x & 15, y & 15, hsl(215, 18, 34));
+            x += azar() < 0.5 ? 1 : 0; y += azar() < 0.6 ? 1 : -1;
+          }
+        }
+        for (let i = 0; i < 6; i++) px(Math.floor(azar() * 16), Math.floor(azar() * 16), hsl(215, 12, 72));
+      }),
+      // Agua turquesa con ondas claras
+      agua: () => crearTextura(44, 16, (px, azar) => {
+        for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) px(x, y, hsl(180, 62, 42 + azar() * 6));
+        [2, 7, 12].forEach(fila => {
+          const des = Math.floor(azar() * 8);
+          for (let x = 0; x < 16; x++) px(x, fila + (Math.sin((x + des) * Math.PI / 4) > 0 ? 0 : 1), hsl(178, 70, 68));
+        });
+      }),
+      // Espada: hoja metálica con brillo en el centro y filo oscuro
+      hoja: () => crearTextura(55, 16, (px, azar) => {
+        for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+          const borde = Math.min(x, 15 - x);
+          const l = borde === 0 ? 42 : (x === 7 || x === 8) ? 94 : 62 + borde * 3 + azar() * 4;
+          px(x, y, hsl(210, 10, l));
+        }
+      }),
+      guarda: () => crearTextura(66, 16, (px, azar) => {
+        for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++)
+          px(x, y, (y === 0 || y === 15) ? hsl(38, 80, 32) : y === 3 ? hsl(48, 95, 75) : hsl(42, 85, 48 + azar() * 10));
+      }),
+      // Empuñadura de cuero con tiras en diagonal
+      cuero: () => crearTextura(77, 16, (px, azar) => {
+        for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++)
+          px(x, y, (x + y) % 5 === 0 ? hsl(22, 45, 17) : hsl(25, 50, 28 + azar() * 6));
+      }),
+      // Martillo: cabeza de hierro y mango de madera con vetas
+      hierro: () => crearTextura(88, 16, (px, azar) => {
+        for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+          const borde = x === 0 || x === 15 || y === 15;
+          px(x, y, borde ? hsl(210, 6, 24) : y < 2 ? hsl(210, 6, 62) : hsl(210, 6, 38 + azar() * 9));
+        }
+      }),
+      madera: () => crearTextura(99, 16, (px, azar) => {
+        const vetas = [];
+        for (let x = 0; x < 16; x++) vetas.push(34 + azar() * 8);
+        for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++)
+          px(x, y, azar() < 0.08 ? hsl(28, 50, 24) : hsl(30, 50, vetas[x] + azar() * 3));
+      }),
+      // Pelo de los animales: casi blanco, se tiñe con el color de cada parte
+      pelo: () => crearTextura(111, 16, (px, azar) => {
+        for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) px(x, y, hsl(0, 0, 84 + azar() * 16));
+      })
+    };
+
+    /* =========================================================
+       4. EL MUNDO: datos de los bloques y sus mallas
+       ========================================================= */
+    // "Mundo" es el único sitio donde se guardan los bloques.
+    // bloques[i] dice qué tipo hay en cada hueco; instancia[i] dice qué dibujo lo representa.
+    const Mundo = {
+      bloques: new Uint8Array(TAM * TAM * ALTO),
+      instancia: new Int32Array(TAM * TAM * ALTO).fill(-1),
+      grupos: {},  // por tipo: { malla, celdas, cuenta }
+
+      indice(x, y, z) { return x + z * TAM + y * TAM * TAM; },
+      dentro(x, y, z) { return x >= 0 && x < TAM && z >= 0 && z < TAM && y >= 0 && y < ALTO; },
+      tipo(x, y, z) {
+        if (y < 0) return PIEDRA;                 // por debajo del mundo: macizo
+        if (!this.dentro(x, y, z)) return AIRE;   // fuera del mapa: aire
+        return this.bloques[this.indice(x, y, z)];
+      },
+
+      // Un bloque se dibuja solo si se ve: si toca aire (o agua, que es transparente)
+      seVe(x, y, z) {
+        const t = this.tipo(x, y, z);
+        if (t === AIRE) return false;
+        if (t === AGUA) return this.tipo(x, y + 1, z) === AIRE; // del agua solo la superficie
+        const vecinos = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+        return vecinos.some(([dx, dy, dz]) => {
+          const n = this.tipo(x + dx, y + dy, z + dz);
+          return n === AIRE || n === AGUA;
+        });
+      },
+
+      // Crea el terreno con la semilla
+      generar(semilla) {
+        const ruido = crearRuido(semilla);
+        for (let x = 0; x < TAM; x++) {
+          for (let z = 0; z < TAM; z++) {
+            // Mezcla de tres "zooms" de ruido: colinas grandes + detalles pequeños
+            const n = ruido(x / 16, z / 16) * 0.6 + ruido(x / 8 + 50, z / 8 + 50) * 0.3 + ruido(x / 4 + 99, z / 4 + 99) * 0.1;
+            const h = 1 + Math.floor(Math.pow(n, 1.4) * 14); // número de bloques de la columna
+            for (let y = 0; y < ALTO; y++) {
+              let t = AIRE;
+              if (y < h) {
+                if (y === h - 1) t = (h > 12) ? PIEDRA : (h - 1 < NIVEL_AGUA ? TIERRA : HIERBA);
+                else if (y >= h - 3) t = TIERRA;
+                else t = PIEDRA;
+              } else if (y < NIVEL_AGUA) {
+                t = AGUA;
+              }
+              this.bloques[this.indice(x, y, z)] = t;
+            }
+          }
+        }
+      },
+
+      // --- Instancias: añadir o quitar el dibujo de un bloque concreto ---
+      mostrar(i) {
+        if (this.instancia[i] >= 0) return;
+        const g = this.grupos[this.bloques[i]];
+        if (!g) return;
+        const n = g.cuenta++;
+        g.celdas[n] = i;
+        this.instancia[i] = n;
+        const x = i % TAM, z = Math.floor(i / TAM) % TAM, y = Math.floor(i / (TAM * TAM));
+        Mundo._matriz.makeTranslation(x + 0.5, y + 0.5, z + 0.5);
+        g.malla.setMatrixAt(n, Mundo._matriz);
+        g.malla.count = g.cuenta;
+        g.malla.instanceMatrix.needsUpdate = true;
+      },
+      ocultar(i) {
+        const n = this.instancia[i];
+        if (n < 0) return;
+        const g = this.grupos[this.bloques[i]];
+        const ultima = --g.cuenta;
+        if (n !== ultima) {
+          // Movemos la última instancia al hueco que queda libre
+          const celdaUltima = g.celdas[ultima];
+          g.malla.getMatrixAt(ultima, Mundo._matriz);
+          g.malla.setMatrixAt(n, Mundo._matriz);
+          g.celdas[n] = celdaUltima;
+          this.instancia[celdaUltima] = n;
+        }
+        this.instancia[i] = -1;
+        g.malla.count = g.cuenta;
+        g.malla.instanceMatrix.needsUpdate = true;
+      },
+
+      // Quita un bloque (lo usa el martillo). Devuelve true si se quitó.
+      quitarBloque(x, y, z, registrar = true) {
+        const t = this.tipo(x, y, z);
+        if (!this.dentro(x, y, z) || t === AIRE || t === AGUA) return false;
+        const i = this.indice(x, y, z);
+        this.ocultar(i);
+        this.bloques[i] = AIRE;
+        // Los vecinos que antes estaban tapados ahora pueden verse
+        [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]].forEach(([dx, dy, dz]) => {
+          const vx = x + dx, vy = y + dy, vz = z + dz;
+          if (this.dentro(vx, vy, vz) && this.seVe(vx, vy, vz)) this.mostrar(this.indice(vx, vy, vz));
+        });
+        if (registrar) estado.bloquesRotos.push([x, y, z]);
+        return true;
+      },
+
+      // Altura a la que se ponen los pies de Pepe en el punto (x, z)
+      alturaSuelo(x, z) {
+        const cx = Math.min(TAM - 1, Math.max(0, Math.floor(x)));
+        const cz = Math.min(TAM - 1, Math.max(0, Math.floor(z)));
+        for (let y = ALTO - 1; y >= 0; y--) {
+          const t = this.bloques[this.indice(cx, y, cz)];
+          if (t === AGUA) return y + 1 - 0.6;  // en el agua, Pepe se moja hasta las rodillas
+          if (t !== AIRE) return y + 1;
+        }
+        return 0;
+      }
+    };
+
+    /* =========================================================
+       5. COMPONENTES DE A-FRAME
+       ========================================================= */
+
+    // Cielo degradado de azul (arriba) a melocotón (horizonte)
+    AFRAME.registerComponent('cielo-degradado', {
+      init() {
+        const material = new THREE.ShaderMaterial({
+          side: THREE.BackSide, depthWrite: false, fog: false,
+          uniforms: {
+            arriba: { value: new THREE.Vector3(0x4a / 255, 0xa3 / 255, 0xff / 255) },
+            abajo:  { value: new THREE.Vector3(0xff / 255, 0xc5 / 255, 0x9a / 255) }
+          },
+          vertexShader: 'varying float vAlt; void main() { vAlt = normalize(position).y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+          fragmentShader: 'uniform vec3 arriba; uniform vec3 abajo; varying float vAlt; void main() { float t = clamp(vAlt * 1.8 + 0.1, 0.0, 1.0); gl_FragColor = vec4(mix(abajo, arriba, t), 1.0); }'
+        });
+        const esfera = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 12), material);
+        esfera.renderOrder = -1;
+        this.el.setObject3D('mesh', esfera);
+      }
+    });
+
+    // Mundo de bloques: un InstancedMesh por tipo de bloque (4 llamadas de dibujo)
+    AFRAME.registerComponent('mundo-bloques', {
+      init() {
+        Mundo._matriz = new THREE.Matrix4();
+        // Geometría y material de cada tipo: se crean una sola vez
+        const caja = new THREE.BoxGeometry(1, 1, 1);
+        // La hierba usa otra caja: cada cara toma su trozo del atlas (arriba | lado | abajo)
+        const cajaHierba = caja.clone();
+        const uv = cajaHierba.attributes.uv;
+        const trozo = [1, 1, 0, 2, 1, 1];  // caras: +x, -x, arriba, abajo, +z, -z
+        for (let i = 0; i < uv.count; i++) uv.setX(i, (uv.getX(i) + trozo[Math.floor(i / 4)]) / 3);
+        const mat = (tex, agua) => new THREE.MeshLambertMaterial({ map: tex, transparent: agua, opacity: agua ? 0.8 : 1 });
+        Mundo.piezas = {
+          [HIERBA]: { geo: cajaHierba, mat: mat(TEX.hierba()) },
+          [TIERRA]: { geo: caja, mat: mat(TEX.tierra()) },
+          [PIEDRA]: { geo: caja, mat: mat(TEX.piedra()) },
+          [AGUA]:   { geo: caja, mat: mat(TEX.agua(), true) }
+        };
+        Mundo.grupo = new THREE.Group();
+        this.el.setObject3D('mesh', Mundo.grupo);
+        Mundo.construir();
+        guardar(); // así la semilla queda guardada desde el primer momento
+      }
+    });
+
+    // Crea (o vuelve a crear) el terreno y sus mallas con estado.semilla y estado.bloquesRotos.
+    // Solo se usa al cargar y al empezar un mundo nuevo, nunca en cada fotograma.
+    Mundo.construir = function () {
+      this.generar(estado.semilla);
+      // Aplicamos los bloques rotos guardados de otras partidas
+      estado.bloquesRotos.forEach(([x, y, z]) => {
+        const i = this.indice(x, y, z);
+        if (this.bloques[i] !== AGUA) this.bloques[i] = AIRE;
+      });
+      this.instancia.fill(-1);
+
+      // Contamos cuántos bloques hay de cada tipo para reservar sitio
+      const cuantos = {};
+      this.bloques.forEach(t => { cuantos[t] = (cuantos[t] || 0) + 1; });
+
+      Object.keys(TIPOS).forEach(clave => {
+        const t = Number(clave);
+        const viejo = this.grupos[t];
+        if (viejo) { this.grupo.remove(viejo.malla); viejo.malla.dispose(); }  // malla del mundo anterior
+        const capacidad = Math.max(1, cuantos[t] || 0);
+        const malla = new THREE.InstancedMesh(this.piezas[t].geo, this.piezas[t].mat, capacidad);
+        malla.count = 0;
+        malla.frustumCulled = false; // las instancias cambian: no dejamos que Three las recorte mal
+        if (TIPOS[t].transparente) malla.renderOrder = 1; // el agua se pinta después de lo sólido
+        this.grupos[t] = { malla, celdas: new Int32Array(capacidad), cuenta: 0 };
+        this.grupo.add(malla);
+      });
+
+      // Solo dibujamos los bloques que se pueden ver
+      for (let y = 0; y < ALTO; y++)
+        for (let z = 0; z < TAM; z++)
+          for (let x = 0; x < TAM; x++)
+            if (this.seVe(x, y, z)) this.mostrar(this.indice(x, y, z));
+    };
+
+    // Al perder: semilla nueva, sin agujeros, terreno nuevo y guardado
+    function mundoNuevo() {
+      estado.semilla = Math.floor(Math.random() * 1e9);
+      estado.bloquesRotos = [];
+      Mundo.construir();
+      guardar();
+    }
+
+    // Movimiento de Pepe: WASD en el ordenador y joysticks en las gafas
+    AFRAME.registerComponent('movimiento-pepe', {
+      schema: { velocidad: { default: 4 } },
+      init() {
+        this.teclas = {};
+        this.stick = { x: 0, y: 0 };   // joystick izquierdo (andar)
+        this.giroListo = true;          // joystick derecho (girar a saltos)
+        this.cabeza = document.getElementById('cabeza');
+        this.adelante = new THREE.Vector3();
+        this.q = new THREE.Quaternion();
+        this.posCabeza = new THREE.Vector3();
+        this.vy = 0;           // velocidad vertical (m/s)
+        this.enSuelo = true;
+        this.saltos = 0;       // saltos hechos desde que tocó suelo (máximo 2)
+        Juego.movimiento = this;
+
+        window.addEventListener('keydown', e => {
+          // Barra espaciadora: saltar (preventDefault para que no pulse un botón con foco)
+          if (e.code === 'Space' && estado.jugando) { e.preventDefault(); if (!e.repeat) this.saltar(); }
+        });
+        // El botón A (saltar) se lee directamente del mando en el componente "mandos-xr"
+        window.addEventListener('keydown', e => { this.teclas[e.code] = true; });
+        window.addEventListener('keyup', e => { this.teclas[e.code] = false; });
+        window.addEventListener('blur', () => { this.teclas = {}; });
+
+        document.getElementById('manoIzq').addEventListener('thumbstickmoved', e => {
+          this.stick.x = e.detail.x; this.stick.y = e.detail.y;
+        });
+        document.getElementById('manoDer').addEventListener('thumbstickmoved', e => this.girar(e.detail.x));
+      },
+
+      // Giro a saltos de 30 grados (marea menos que girar suave), alrededor de la cabeza
+      girar(x) {
+        if (!estado.jugando) return;
+        if (Math.abs(x) < 0.3) { this.giroListo = true; return; }
+        if (!this.giroListo || Math.abs(x) < 0.7) return;
+        this.giroListo = false;
+        const rig = this.el.object3D;
+        const antes = this.cabeza.object3D.getWorldPosition(new THREE.Vector3());
+        rig.rotation.y += (x > 0 ? -1 : 1) * Math.PI / 6;
+        rig.updateMatrixWorld(true);
+        const despues = this.cabeza.object3D.getWorldPosition(new THREE.Vector3());
+        rig.position.x += antes.x - despues.x;
+        rig.position.z += antes.z - despues.z;
+      },
+
+      // Salto y doble salto (el segundo, en el aire, es más alto)
+      saltar() {
+        if (!estado.jugando || this.saltos >= 2) return;
+        const doble = this.saltos === 1;
+        // Con la copa, el salto es el doble de alto: la altura crece con la velocidad al cuadrado, así que × √2
+        const copa = estado.copaHasta > estado.tiempo ? Math.SQRT2 : 1;
+        this.vy = (doble ? SALTO_DOBLE : SALTO) * copa;
+        this.saltos++;
+        this.enSuelo = false;
+        sonar(doble ? 'dobleSalto' : 'salto', Juego.cabeza);
+      },
+      reiniciar() { this.vy = 0; this.enSuelo = true; this.saltos = 0; },
+
+      // ¿Puede la cabeza entrar en la columna (x, z)? Solo si no es más alta que un paso sobre los pies
+      libre(x, z) { return Mundo.alturaSuelo(x, z) <= this.el.object3D.position.y + PASO; },
+
+      tick(t, dt) {
+        const seg = Math.min(dt, 100) / 1000;
+        const rig = this.el.object3D;
+        if (!estado.jugando) {
+          // En la pantalla de inicio, el mundo gira despacio de fondo (en el fin de partida, no)
+          if (!estado.modo) rig.rotation.y += seg * 0.05;
+          return;
+        }
+        // Posición real de los ojos de Pepe: la usan monedas y zombis
+        this.el.sceneEl.camera.getWorldPosition(Juego.cabeza);
+
+        // Dirección hacia la que mira la cabeza, aplanada sobre el suelo
+        this.cabeza.object3D.getWorldQuaternion(this.q);
+        this.adelante.set(0, 0, -1).applyQuaternion(this.q);
+        this.adelante.y = 0;
+        if (this.adelante.lengthSq() < 1e-6) this.adelante.set(0, 0, -1);
+        this.adelante.normalize();
+        const derX = -this.adelante.z, derZ = this.adelante.x;
+
+        // Mezclamos teclado y joystick
+        const k = this.teclas;
+        let avance = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0) - this.stick.y;
+        let lado = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0) + this.stick.x;
+        if (Math.abs(this.stick.x) < 0.15 && Math.abs(this.stick.y) < 0.15 && !Object.values(k).some(Boolean)) {
+          avance = 0; lado = 0; // zona muerta del joystick
+        }
+        const largo = Math.hypot(avance, lado);
+        if (largo > 1) { avance /= largo; lado /= largo; }
+
+        const v = this.data.velocidad * seg;
+        const mx = (this.adelante.x * avance + derX * lado) * v;
+        const mz = (this.adelante.z * avance + derZ * lado) * v;
+        // Paredes: cada eje se prueba por separado (así se resbala por la pared en vez de pararse).
+        // Se mira 25 cm por delante de la cabeza para no meter la cara en el bloque.
+        this.cabeza.object3D.getWorldPosition(this.posCabeza);
+        const h = this.posCabeza;
+        if (mx && this.libre(h.x + mx + Math.sign(mx) * 0.25, h.z)) rig.position.x += mx;
+        if (mz && this.libre(h.x, h.z + mz + Math.sign(mz) * 0.25)) rig.position.z += mz;
+
+        // No salir del mapa (miramos dónde está la cabeza, que en VR puede moverse)
+        rig.updateMatrixWorld(true);
+        this.cabeza.object3D.getWorldPosition(this.posCabeza);
+        const margen = 0.3;
+        if (this.posCabeza.x < margen) rig.position.x += margen - this.posCabeza.x;
+        if (this.posCabeza.x > TAM - margen) rig.position.x -= this.posCabeza.x - (TAM - margen);
+        if (this.posCabeza.z < margen) rig.position.z += margen - this.posCabeza.z;
+        if (this.posCabeza.z > TAM - margen) rig.position.z -= this.posCabeza.z - (TAM - margen);
+
+        // Altura: la del suelo de la columna en la que está la cabeza
+        const suelo = Mundo.alturaSuelo(this.posCabeza.x, this.posCabeza.z);
+        if (this.enSuelo && rig.position.y > suelo + 0.05) this.enSuelo = false;  // se acaba el suelo: cae
+        if (!this.enSuelo) {
+          // Gravedad sencilla: la velocidad vertical baja cada fotograma
+          this.vy -= GRAVEDAD * seg;
+          rig.position.y += this.vy * seg;
+          if (rig.position.y <= suelo) {
+            rig.position.y = suelo;                    // se queda encima de la columna
+            if (this.vy <= 0) this.reiniciar();        // ha aterrizado: vuelve a tener 2 saltos
+          }
+        } else {
+          rig.position.y += (suelo - rig.position.y) * Math.min(1, seg * 12);  // sube escalones suave
+        }
+      }
+    });
+
+    /* =========================================================
+       6. LA PARTIDA: herramientas, monedas, zombis, marcador y fin
+       ========================================================= */
+    const VIDAS = 5, MONEDAS = 5, ZOMBIS_INICIO = 5, MAX_ZOMBIS = 30;
+    const MONEDAS_BOLA = 3;                  // monedas para desbloquear la bola de fuego
+    const geoCaja = new THREE.BoxGeometry(1, 1, 1);  // una sola caja que comparten herramientas y zombis
+    const EJE_Y = new THREE.Vector3(0, 1, 0);
+
+    // Punto de encuentro entre componentes
+    const Juego = {
+      monedas: null, zombis: null, partida: null, movimiento: null, animales: null,
+      cabeza: new THREE.Vector3(TAM / 2, 8, TAM / 2)  // dónde están los ojos de Pepe
+    };
+
+    /* ---------- SONIDO: todo se genera con Web Audio, sin archivos ---------- */
+    const Sonido = {
+      activado: true,
+      ctx: null,           // el AudioContext se crea tras un clic o al entrar en VR
+      voces: {},           // por tipo de efecto: cuándo acaba cada voz
+      ultimo: {},          // por tipo de efecto: cuándo sonó la última vez
+      bpm: 110, siguiente: 0, paso: 0,  // música
+      v: new THREE.Vector3(), f: new THREE.Vector3(), u: new THREE.Vector3(), q: new THREE.Quaternion(),
+
+      // Arranca el audio (el navegador solo lo permite tras una acción de la persona)
+      iniciar() {
+        if (!this.ctx) {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return;
+          const ctx = this.ctx = new AC();
+          // Cadena: música y efectos -> volumen general -> compresor (evita que sature) -> altavoces
+          this.maestro = ctx.createGain();
+          this.maestro.gain.value = this.activado ? 1 : 0;
+          this.maestro.connect(ctx.createDynamicsCompressor()).connect(ctx.destination);
+          this.musica = ctx.createGain(); this.musica.gain.value = 0.3; this.musica.connect(this.maestro);
+          this.efectos = ctx.createGain(); this.efectos.gain.value = 0.9; this.efectos.connect(this.maestro);
+          // Un segundo de ruido blanco que reutilizan todos los sonidos de "ruido"
+          this.ruidoBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+          const datos = this.ruidoBuf.getChannelData(0);
+          for (let i = 0; i < datos.length; i++) datos[i] = Math.random() * 2 - 1;
+        }
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+      },
+
+      // Activar o silenciar todo (música y efectos)
+      cambiar() {
+        this.activado = !this.activado;
+        if (this.ctx) this.maestro.gain.setTargetAtTime(this.activado ? 1 : 0, this.ctx.currentTime, 0.03);
+      },
+
+      // Cada fotograma: el oyente sigue a la cámara y se programa la música
+      tick(cam) {
+        const ctx = this.ctx;
+        if (!ctx || !this.activado || ctx.state !== 'running') return;
+        cam.getWorldPosition(this.v);
+        cam.getWorldQuaternion(this.q);
+        const f = this.f.set(0, 0, -1).applyQuaternion(this.q), u = this.u.set(0, 1, 0).applyQuaternion(this.q);
+        const l = ctx.listener, v = this.v;
+        if (l.positionX) {
+          l.positionX.value = v.x; l.positionY.value = v.y; l.positionZ.value = v.z;
+          l.forwardX.value = f.x; l.forwardY.value = f.y; l.forwardZ.value = f.z;
+          l.upX.value = u.x; l.upY.value = u.y; l.upZ.value = u.z;
+        } else {
+          l.setPosition(v.x, v.y, v.z);
+          l.setOrientation(f.x, f.y, f.z, u.x, u.y, u.z);
+        }
+        this.programarMusica();
+      },
+
+      // La música se programa un poco por adelantado con el reloj de audio (no con setInterval)
+      programarMusica() {
+        const ahora = this.ctx.currentTime;
+        if (!estado.jugando) { this.bpm = 110; this.paso = 0; this.siguiente = 0; return; }  // en el fin, se para
+        if (this.siguiente < ahora) this.siguiente = ahora + 0.05;
+        while (this.siguiente < ahora + 0.15) {
+          this.tocarPaso(this.paso, this.siguiente);
+          this.siguiente += 60 / this.bpm / 4;   // cada paso es una semicorchea
+          this.paso = (this.paso + 1) % 64;      // 4 compases de 16 pasos
+        }
+      },
+
+      // Composición propia en La menor: bajo insistente, gancho corto y capas que se añaden
+      tocarPaso(p, t) {
+        const m = this.musica, s = p & 15, compas = p >> 4, dur = 60 / this.bpm / 4;
+        // Nivel de frenesí (0 a 1): sube con el tiempo de partida y con los zombis
+        const zombis = Juego.zombis ? Juego.zombis.activos.length : ZOMBIS_INICIO;
+        const nivel = Math.min(1, estado.tiempo / 240 + Math.max(0, zombis - ZOMBIS_INICIO) / 20);
+        this.bpm += (110 + 60 * nivel - this.bpm) * 0.05;   // de 110 a 170 pulsaciones, poco a poco
+        const raiz = MUSICA.raices[compas];
+        if (s % 4 === 0) nota(m, t, 'sine', 150, 40, 0.18, 0.9);                              // bombo
+        if (nivel > 0.15 && (s === 4 || s === 12)) ruido(m, t, 0.12, 0.35, 'highpass', 1800, 1200); // caja
+        if (s % 2 === 0 || nivel > 0.4) ruido(m, t, 0.04, 0.1, 'highpass', 7000, 7000);       // charles (más rápido con nivel)
+        if (s % 2 === 0) {                                                                      // bajo
+          const fb = tono(55, raiz + (s % 4 === 2 ? 12 : 0));
+          nota(filtro(m, 'lowpass', 500), t, 'sawtooth', fb, fb, dur * 1.8, 0.5);
+        }
+        const g = MUSICA.gancho[p & 31];                                                        // melodía que engancha
+        if (g !== null) { const fm = tono(440, g); nota(m, t, 'square', fm, fm, dur * 1.6, 0.1); }
+        if (nivel > 0.65) { const fa = tono(880, raiz + MUSICA.acorde[s % 4]); nota(m, t, 'triangle', fa, fa, dur * 0.9, 0.1); } // arpegio agudo
+      }
+    };
+    // Notas de la música en semitonos sobre La (null = silencio)
+    const MUSICA = {
+      raices: [0, 0, -4, -2],   // La, La, Fa, Sol
+      acorde: [0, 3, 7, 12],
+      gancho: [0, null, 3, null, 7, null, 5, 3, null, null, 0, null, -2, null, 0, null,
+               0, null, 3, null, 7, null, 10, 8, null, 7, null, 5, 3, null, null, null]
+    };
+    const tono = (base, semitonos) => base * Math.pow(2, semitonos / 12);
+
+    // Ayudantes de síntesis. "d" es a dónde va el sonido y "t" cuándo empieza (reloj de audio).
+    function envolvente(d, t, dur, vol) {
+      const g = Sonido.ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(vol, t + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      g.connect(d);
+      return g;
+    }
+    function filtro(d, tipo, frecuencia) {
+      const f = Sonido.ctx.createBiquadFilter();
+      f.type = tipo; f.frequency.value = frecuencia;
+      f.connect(d);
+      return f;
+    }
+    // Una nota con un oscilador cuya frecuencia va de f0 a f1
+    function nota(d, t, tipo, f0, f1, dur, vol) {
+      const o = Sonido.ctx.createOscillator();
+      o.type = tipo;
+      o.frequency.setValueAtTime(f0, t);
+      o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+      o.connect(envolvente(d, t, dur, vol));
+      o.start(t); o.stop(t + dur + 0.02);
+    }
+    // Ruido filtrado (golpes, tajos, explosiones), con el filtro yendo de f0 a f1
+    function ruido(d, t, dur, vol, tipo, f0, f1) {
+      const ctx = Sonido.ctx, s = ctx.createBufferSource(), f = ctx.createBiquadFilter();
+      s.buffer = Sonido.ruidoBuf;
+      f.type = tipo;
+      f.frequency.setValueAtTime(f0, t);
+      f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+      s.connect(f).connect(envolvente(d, t, dur, vol));
+      s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.02);
+    }
+
+    // Efectos de la ficha. Cada uno devuelve cuánto dura (para contar las voces).
+    const EFECTOS = {
+      martillo: (d, t) => { nota(d, t, 'sine', 180, 55, 0.18, 0.9); ruido(d, t, 0.08, 0.5, 'lowpass', 1200, 300); return 0.2; },
+      espada: (d, t) => { ruido(d, t, 0.2, 0.6, 'bandpass', 4000, 800); return 0.2; },
+      grito: (d, t) => { nota(d, t, 'sawtooth', 520, 1050, 0.18, 0.3); nota(d, t + 0.16, 'sawtooth', 1000, 420, 0.25, 0.25); return 0.42; },
+      grunido: (d, t) => { const f = filtro(d, 'lowpass', 500); nota(f, t, 'sawtooth', 95, 70, 0.6, 0.4); nota(f, t, 'sawtooth', 101, 74, 0.6, 0.3); return 0.6; },
+      'zombi-muere': (d, t) => { nota(filtro(d, 'lowpass', 900), t, 'sawtooth', 320, 45, 0.7, 0.45); ruido(d, t, 0.5, 0.3, 'lowpass', 900, 100); return 0.7; },
+      moneda: (d, t) => { nota(d, t, 'square', 988, 988, 0.09, 0.2); nota(d, t + 0.08, 'square', 1319, 1319, 0.3, 0.2); return 0.4; },
+      salto: (d, t) => { nota(d, t, 'square', 280, 560, 0.14, 0.15); return 0.15; },
+      dobleSalto: (d, t) => { nota(d, t, 'square', 360, 720, 0.12, 0.15); nota(d, t + 0.09, 'square', 540, 1080, 0.14, 0.15); return 0.25; },
+      rugido: (d, t) => { ruido(d, t, 0.45, 0.7, 'lowpass', 400, 2500); nota(filtro(d, 'lowpass', 800), t, 'sawtooth', 120, 60, 0.45, 0.35); return 0.5; },
+      explosion: (d, t) => { ruido(d, t, 0.8, 1, 'lowpass', 1500, 80); nota(d, t, 'sine', 90, 30, 0.6, 0.9); return 0.8; },
+      dano: (d, t) => { nota(d, t, 'square', 240, 120, 0.25, 0.25); ruido(d, t, 0.1, 0.4, 'lowpass', 800, 300); return 0.3; },
+      mugido: (d, t) => { nota(filtro(d, 'lowpass', 600), t, 'sawtooth', 150, 110, 1, 0.4); return 1; },
+      balido: (d, t) => { const f = filtro(d, 'bandpass', 1200); [500, 480, 455].forEach((fr, i) => nota(f, t + i * 0.15, 'sawtooth', fr, fr * 0.97, 0.16, 0.3)); return 0.5; },
+      // Animales enfadados: más agudos, más fuertes y más bruscos
+      mugidoEnfadado: (d, t) => { const f = filtro(d, 'lowpass', 1400); nota(f, t, 'sawtooth', 210, 340, 0.25, 0.55); nota(f, t + 0.22, 'sawtooth', 340, 120, 0.6, 0.55); return 0.85; },
+      balidoEnfadado: (d, t) => { const f = filtro(d, 'bandpass', 1800); [720, 800, 720, 800, 640].forEach((fr, i) => nota(f, t + i * 0.08, 'sawtooth', fr, fr * 0.9, 0.09, 0.4)); return 0.5; },
+      // Copa: arpegio brillante al cogerla y aviso de dos notas al acabar
+      copa: (d, t) => { [784, 988, 1175, 1568].forEach((fr, i) => nota(d, t + i * 0.07, 'triangle', fr, fr, 0.25, 0.3)); return 0.5; },
+      finCopa: (d, t) => { nota(d, t, 'square', 660, 660, 0.15, 0.18); nota(d, t + 0.16, 'square', 440, 440, 0.3, 0.18); return 0.5; },
+      // Dragón: rugido grave y largo; llamarada: ruido que se abre como un soplido
+      dragon: (d, t) => { const f = filtro(d, 'lowpass', 700); nota(f, t, 'sawtooth', 90, 48, 1.4, 0.6); nota(f, t, 'sawtooth', 96, 52, 1.4, 0.5); ruido(d, t, 1.2, 0.6, 'bandpass', 500, 180); return 1.4; },
+      llamarada: (d, t) => { ruido(d, t, 1.3, 0.9, 'lowpass', 300, 4000); ruido(d, t + 0.05, 1.2, 0.5, 'bandpass', 900, 250); return 1.3; },
+      ganar: (d, t) => { [523, 659, 784, 1047].forEach((fr, i) => nota(d, t + i * 0.13, 'square', fr, fr, i === 3 ? 0.45 : 0.14, 0.2)); return 0.85; },
+      perder: (d, t) => { [392, 330, 262, 196].forEach((fr, i) => nota(d, t + i * 0.22, 'triangle', fr, fr * 0.98, i === 3 ? 0.6 : 0.22, 0.4)); return 1.3; }
+    };
+    // Límites por tipo: [voces a la vez, segundos mínimos entre dos]. Así 150 bolas o 30 zombis no saturan.
+    const LIMITES = { grunido: [3, 0.3], explosion: [4, 0.06], rugido: [3, 0.06], grito: [3, 0.1], 'zombi-muere': [3, 0.08], mugido: [2, 1], balido: [2, 1] };
+    const LIMITE_NORMAL = [3, 0.05];
+    // Estos suenan "dentro de la cabeza" de Pepe, sin posición
+    const SIN_POSICION = { salto: true, dobleSalto: true, dano: true, ganar: true, perder: true, finCopa: true };
+
+    // Toca un efecto. "posicion" es un Vector3 (se lee al momento, no se guarda).
+    function sonar(nombre, posicion) {
+      const S = Sonido, ctx = S.ctx, efecto = EFECTOS[nombre];
+      if (!ctx || !S.activado || ctx.state !== 'running' || !efecto) return;
+      const ahora = ctx.currentTime, lim = LIMITES[nombre] || LIMITE_NORMAL;
+      if (ahora - (S.ultimo[nombre] || -9) < lim[1]) return;   // demasiado seguido
+      const voces = S.voces[nombre] || (S.voces[nombre] = [0, 0, 0, 0]);
+      let hueco = -1;
+      for (let i = 0; i < lim[0]; i++) if (voces[i] <= ahora) { hueco = i; break; }
+      if (hueco < 0) return;                                    // ya suenan bastantes de este tipo
+      let salida = S.efectos;
+      if (posicion && !SIN_POSICION[nombre]) {
+        if (posicion.distanceToSquared(Juego.cabeza) > 1600) return;  // a más de 40 m no se oye
+        // PannerNode: el sonido sale del sitio donde ocurre
+        const p = ctx.createPanner();
+        p.panningModel = 'HRTF'; p.distanceModel = 'inverse';
+        p.refDistance = 2; p.maxDistance = 60; p.rolloffFactor = 1;
+        if (p.positionX) { p.positionX.value = posicion.x; p.positionY.value = posicion.y; p.positionZ.value = posicion.z; }
+        else p.setPosition(posicion.x, posicion.y, posicion.z);
+        p.connect(S.efectos);
+        salida = p;
+      }
+      voces[hueco] = ahora + efecto(salida, ahora);
+      S.ultimo[nombre] = ahora;
+    }
+
+    // Componente que mueve el oyente con la cámara y programa la música en cada fotograma
+    AFRAME.registerComponent('sonido', {
+      tick() { Sonido.tick(this.el.sceneEl.camera); }
+    });
+
+    // Empieza (o repite) una partida: vidas, monedas y zombis nuevos
+    function nuevaPartida() {
+      Object.assign(estado, { salud: VIDAS, monedas: 0, tiempo: 0, protegidoHasta: 0, copaHasta: 0, fin: null });
+      Juego.cabeza.set(TAM / 2, Mundo.alturaSuelo(TAM / 2, TAM / 2) + 1.6, TAM / 2);
+      if (Juego.partida) Juego.partida.ocultarFin();
+      if (Juego.movimiento) Juego.movimiento.reiniciar();
+      if (Juego.animales) Juego.animales.repartir();
+      if (Juego.monedas) Juego.monedas.nueva();
+      if (Juego.zombis) Juego.zombis.nueva();
+      if (Juego.bolas) Juego.bolas.vaciar();
+      if (Juego.dragon) Juego.dragon.nueva();  // copa nueva y sin dragón
+    }
+
+    // Escribe varias líneas centradas en un lienzo (para paneles 3D sin descargar fuentes)
+    function pintarLineas(lienzo, lineas, tamanos) {
+      const ctx = lienzo.getContext('2d'), w = lienzo.width, h = lienzo.height;
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = 'rgba(34, 48, 63, 0.88)';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const alto = h / lineas.length;
+      lineas.forEach((l, i) => {
+        ctx.font = 'bold ' + tamanos[i] + 'px system-ui, Arial, sans-serif';
+        ctx.fillText(l, w / 2, alto * (i + 0.5));
+      });
+    }
+
+    // --- Herramientas: martillo y espada en la mano derecha ---
+    AFRAME.registerComponent('herramientas', {
+      init() {
+        // Materiales con texturas pixeladas propias (sección 3b)
+        const mat = tex => new THREE.MeshLambertMaterial({ map: tex });
+        const madera = mat(TEX.madera()), hierro = mat(TEX.hierro());
+        const cuero = mat(TEX.cuero()), dorado = mat(TEX.guarda()), metal = mat(TEX.hoja());
+        // Cada pieza es la caja compartida, estirada a su tamaño
+        const pieza = (grupo, material, tam, y) => {
+          const m = new THREE.Mesh(geoCaja, material);
+          m.scale.set(tam[0], tam[1], tam[2]);
+          m.position.y = y;
+          grupo.add(m);
+        };
+        this.martillo = new THREE.Group();
+        pieza(this.martillo, madera, [0.035, 0.42, 0.035], 0.15);  // mango
+        pieza(this.martillo, hierro, [0.17, 0.09, 0.09], 0.36);    // cabeza
+        this.espada = new THREE.Group();
+        pieza(this.espada, cuero, [0.035, 0.13, 0.035], 0);        // empuñadura
+        pieza(this.espada, dorado, [0.15, 0.03, 0.045], 0.075);    // guarda
+        pieza(this.espada, metal, [0.045, 0.5, 0.015], 0.34);      // hoja
+        this.grupo = new THREE.Group();
+        this.grupo.add(this.martillo, this.espada);
+        // Alturas de la herramienta que golpean (en metros desde la mano)
+        this.puntas = { martillo: [0.25, 0.36], espada: [0.2, 0.4, 0.58] };
+        this.mostrar();
+
+        this.cabeza = document.getElementById('cabeza').object3D;
+        this.antes = new THREE.Vector3();
+        this.ahora = new THREE.Vector3();
+        this.p = new THREE.Vector3();
+        this.dir = new THREE.Vector3();
+        this.punto = new THREE.Vector3();
+        this.q = new THREE.Quaternion();
+        this.espera = 0;  // segundos que faltan para poder golpear otra vez
+        this.anim = 0;    // animación del golpe en el ordenador
+
+        // El botón B (cambiar) se lee directamente del mando en el componente "mandos-xr"
+        window.addEventListener('keydown', e => { if (e.code === 'KeyQ') this.cambiar(); });
+        window.addEventListener('mousedown', e => {
+          // Solo golpea si el ratón ya estaba bloqueado: el clic que lo bloquea no cuenta
+          if (e.button === 0 && estado.jugando && estado.modo === 'ordenador' && document.pointerLockElement) this.golpeRaton();
+        });
+        // La bola de fuego (gatillos, F y clic derecho) está en el componente "bolas"
+      },
+
+      cambiar() {
+        if (!estado.jugando) return;
+        estado.herramienta = estado.herramienta === 'martillo' ? 'espada' : 'martillo';
+        this.mostrar();
+      },
+      mostrar() {
+        this.martillo.visible = estado.herramienta === 'martillo';
+        this.espada.visible = !this.martillo.visible;
+      },
+
+      // Golpe a un ser en el punto p: zombi (con las dos herramientas) o animal (solo la espada lo enfada)
+      golpearSer(p) {
+        const margen = estado.modo === 'ordenador' ? 0.15 : 0;
+        const zombi = Juego.zombis.tocado(p, margen);
+        if (zombi) { Juego.zombis.herir(zombi, p); return true; }
+        if (estado.herramienta === 'espada') {
+          const animal = Juego.animales.tocado(p, margen);
+          if (animal) { Juego.animales.enfadar(animal); return true; }
+        }
+        return false;
+      },
+      // El martillo cava el bloque del punto p
+      cavarEn(p) {
+        if (estado.herramienta !== 'martillo' || !Mundo.quitarBloque(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z))) return false;
+        guardar();
+        sonar('martillo', p);
+        return true;
+      },
+      // Usa la herramienta en el punto p: primero se busca un zombi y después el bloque
+      golpearEn(p) { return this.golpearSer(p) || this.cavarEn(p); },
+
+      // En el ordenador: golpe hacia lo que hay delante, hasta 3 metros
+      golpeRaton() {
+        if (this.espera > 0) return;
+        this.espera = 0.3;
+        this.anim = 0.25;
+        const cam = this.el.sceneEl.camera;
+        cam.getWorldPosition(this.p);
+        cam.getWorldDirection(this.dir);
+        this.rayo(this.p, this.dir, 0.3, 3);  // rayo desde la cámara
+      },
+
+      // Recorre un rayo cada 5 cm: para en el primer zombi o animal y, con el martillo, en el primer bloque sólido
+      rayo(origen, dir, desde, hasta) {
+        for (let d = desde; d <= hasta; d += 0.05) {
+          this.punto.copy(origen).addScaledVector(dir, d);
+          if (this.golpearSer(this.punto)) return true;
+          const t = Mundo.tipo(Math.floor(this.punto.x), Math.floor(this.punto.y), Math.floor(this.punto.z));
+          if (t !== AIRE && t !== AGUA) return this.cavarEn(this.punto);  // la pared también para la espada
+        }
+        return false;
+      },
+
+      // Golpe en VR: 1) zombis en los puntos de la herramienta, 2) martillo: bloques en esos puntos y en la celda
+      // de debajo de la cabeza, 3) rayo corto de 1,5 m hacia donde apunta el mando
+      golpeVR(mano) {
+        const puntas = this.puntas[estado.herramienta];
+        for (let i = 0; i < puntas.length; i++) {
+          this.grupo.localToWorld(this.p.set(0, puntas[i], 0));
+          if (this.golpearSer(this.p)) return true;   // si toca zombi y bloque a la vez, gana el zombi
+        }
+        if (estado.herramienta === 'martillo') {
+          for (let i = 0; i < puntas.length; i++) {
+            this.grupo.localToWorld(this.p.set(0, puntas[i], 0));
+            if (this.cavarEn(this.p)) return true;
+          }
+          this.punto.copy(this.p); this.punto.y -= 1;   // this.p es ahora la cabeza del martillo
+          if (this.cavarEn(this.punto)) return true;
+        }
+        mano.getWorldPosition(this.p);
+        mano.getWorldQuaternion(this.q);
+        this.dir.set(0, 0, -1).applyQuaternion(this.q);
+        return this.rayo(this.p, this.dir, 0.1, 1.5);
+      },
+
+      tick(t, dt) {
+        const seg = Math.min(dt, 100) / 1000;
+        this.espera = Math.max(0, this.espera - seg);
+        // En VR la herramienta va en el mando; en el ordenador, delante de la cámara
+        const vr = estado.modo === 'vr';
+        const padre = vr ? this.el.object3D : this.cabeza;
+        if (this.grupo.parent !== padre) {
+          padre.add(this.grupo);
+          if (vr) { this.grupo.position.set(0, 0, 0); this.grupo.rotation.set(-1.2, 0, 0); }
+          else { this.grupo.position.set(0.28, -0.3, -0.5); this.grupo.rotation.set(-0.4, 0, 0.25); }
+        }
+        this.grupo.visible = !!estado.modo;
+        if (!estado.jugando) return;
+
+        if (!vr) {
+          // Pequeña animación de golpe en el ordenador
+          if (this.anim > 0) {
+            this.anim = Math.max(0, this.anim - seg);
+            this.grupo.rotation.x = -0.4 - Math.sin(this.anim / 0.25 * Math.PI) * 1.1;
+          }
+          return;
+        }
+        // VR: velocidad de la mano respecto a Pepe (así andar no cuenta como golpe)
+        // Se usa la matriz del mando (lo que de verdad mueve el seguimiento) pasada a coordenadas del rig
+        const mano = this.el.object3D;
+        mano.updateWorldMatrix(true, true);  // matrices al día: mando y herramienta
+        mano.getWorldPosition(this.ahora);
+        mano.parent.worldToLocal(this.ahora);
+        const velocidad = this.ahora.distanceTo(this.antes) / Math.max(seg, 0.001);
+        this.antes.copy(this.ahora);
+        if (velocidad < 1.5 || this.espera > 0) return;  // golpe = mano a más de 1,5 m/s
+        if (this.golpeVR(mano)) this.espera = 0.35;
+      }
+    });
+
+    // --- Monedas: 5 doradas que giran (una sola malla con 5 instancias) ---
+    AFRAME.registerComponent('monedas', {
+      init() {
+        Juego.monedas = this;
+        const geo = new THREE.CylinderGeometry(0.3, 0.3, 0.07, 20);
+        geo.rotateX(Math.PI / 2);  // de pie, como una rueda
+        const mat = new THREE.MeshLambertMaterial({ color: '#f5b82e', emissive: '#6b4a00' });
+        this.malla = new THREE.InstancedMesh(geo, mat, MONEDAS);
+        this.malla.count = 0;
+        this.malla.frustumCulled = false;
+        this.el.setObject3D('monedas', this.malla);
+        this.lista = [];
+        for (let i = 0; i < MONEDAS; i++) this.lista.push({ x: 0, z: 0, cogida: true });
+        this.m = new THREE.Matrix4();
+        this.q = new THREE.Quaternion();
+        this.pos = new THREE.Vector3();
+        this.esc = new THREE.Vector3(1, 1, 1);
+        this.cero = new THREE.Matrix4().makeScale(0, 0, 0);  // una moneda cogida no se ve
+      },
+
+      // Reparte monedas nuevas: en tierra firme, separadas y lejos de la salida
+      nueva() {
+        let separacion = 12, puestas = 0;
+        for (let intento = 0; puestas < MONEDAS; intento++) {
+          if (intento % 200 === 199 && separacion > 0) separacion -= 2;  // si no caben, las juntamos
+          const x = 3 + Math.floor(Math.random() * (TAM - 6)) + 0.5;
+          const z = 3 + Math.floor(Math.random() * (TAM - 6)) + 0.5;
+          if (intento < 3000) {
+            if (Mundo.alturaSuelo(x, z) % 1 !== 0) continue;               // en el agua la altura no es entera
+            if (Math.hypot(x - TAM / 2, z - TAM / 2) < 10) continue;        // no pegada a la salida
+          }
+          let cerca = false;
+          for (let j = 0; j < puestas; j++) {
+            if (Math.hypot(x - this.lista[j].x, z - this.lista[j].z) < separacion) cerca = true;
+          }
+          if (cerca) continue;
+          Object.assign(this.lista[puestas++], { x, z, cogida: false });
+        }
+        this.malla.count = MONEDAS;
+      },
+
+      tick(t) {
+        if (!this.malla.count) return;
+        const c = Juego.cabeza;
+        for (let i = 0; i < MONEDAS; i++) {
+          const m = this.lista[i];
+          if (!m.cogida) {
+            // La altura se mira cada vez: si cavas debajo, la moneda baja
+            const y = Mundo.alturaSuelo(m.x, m.z) + 0.9 + Math.sin(t / 400 + i) * 0.1;
+            this.pos.set(m.x, y, m.z);
+            if (estado.jugando && Math.hypot(c.x - m.x, c.z - m.z) < 0.9 && y > c.y - 2.3 && y < c.y + 0.6) {
+              m.cogida = true;
+              estado.monedas++;
+              sonar('moneda', this.pos);
+            }
+          }
+          if (m.cogida) { this.malla.setMatrixAt(i, this.cero); continue; }
+          this.q.setFromAxisAngle(EJE_Y, t / 500 + i);
+          this.m.compose(this.pos, this.q, this.esc);
+          this.malla.setMatrixAt(i, this.m);
+        }
+        this.malla.instanceMatrix.needsUpdate = true;
+      }
+    });
+
+    // --- Zombis: diseño propio hecho de cajas ---
+    // capa: 0 = piel, 1 = ropa, 2 = ojos. piv = punto de giro, off = desplazamiento, giro = cuánto se balancea
+    const PARTES = [
+      { capa: 1, piv: [-0.13, 0.8, 0], off: [0, -0.4, 0], tam: [0.22, 0.8, 0.24], giro: 0.6 },    // pierna izquierda
+      { capa: 1, piv: [0.13, 0.8, 0], off: [0, -0.4, 0], tam: [0.22, 0.8, 0.24], giro: -0.6 },    // pierna derecha
+      { capa: 1, piv: [0, 1.16, 0], off: [0, 0, 0], tam: [0.52, 0.72, 0.3], giro: 0 },             // tronco
+      { capa: 0, piv: [0, 1.74, 0], off: [0, 0, 0], tam: [0.44, 0.44, 0.42], giro: 0 },            // cabeza
+      { capa: 0, piv: [-0.34, 1.42, 0], off: [0, 0, 0.28], tam: [0.16, 0.16, 0.6], giro: 0.2 },    // brazo izquierdo, estirado
+      { capa: 0, piv: [0.34, 1.42, 0], off: [0, 0, 0.28], tam: [0.16, 0.16, 0.6], giro: -0.2 },    // brazo derecho, estirado
+      { capa: 2, piv: [-0.1, 1.78, 0.215], off: [0, 0, 0], tam: [0.1, 0.06, 0.02], giro: 0 },      // ojo izquierdo
+      { capa: 2, piv: [0.1, 1.78, 0.215], off: [0, 0, 0], tam: [0.1, 0.06, 0.02], giro: 0 }        // ojo derecho
+    ];
+    const POR_ZOMBI = [3, 3, 2];  // cajas de cada capa en un zombi
+    const VEL_MAX_ZOMBI = 3.5;
+
+    // Matriz de una parte de un cuerpo de cajas: giro en su articulación, desplazamiento y tamaño.
+    // angulo gira en X (piernas); rz gira en Z (alas del dragón; si no se da, se usa p.rz, p. ej. las cejas).
+    // "aux" es una matriz de trabajo que se reutiliza (no se crea nada nuevo).
+    function matrizParte(out, aux, p, angulo, rz) {
+      out.makeTranslation(p.piv[0], p.piv[1], p.piv[2]);
+      if (angulo) out.multiply(aux.makeRotationX(angulo));
+      rz = rz || p.rz;
+      if (rz) out.multiply(aux.makeRotationZ(rz));
+      out.multiply(aux.makeTranslation(p.off[0], p.off[1], p.off[2]));
+      return out.multiply(aux.makeScale(p.tam[0], p.tam[1], p.tam[2]));
+    }
+
+    AFRAME.registerComponent('zombis', {
+      init() {
+        Juego.zombis = this;
+        this.colores = {
+          normal: [new THREE.Color('#7d8f3a'), new THREE.Color('#4f5b2a'), new THREE.Color('#e02a1c')],
+          aterrador: [new THREE.Color('#465026'), new THREE.Color('#262c16'), new THREE.Color('#ff6a1a')],
+          golpe: new THREE.Color('#ffffff')
+        };
+        const mats = [
+          new THREE.MeshLambertMaterial({ color: '#ffffff' }),
+          new THREE.MeshLambertMaterial({ color: '#ffffff' }),
+          new THREE.MeshBasicMaterial({ color: '#ffffff', fog: false })  // ojos que brillan: sin luz ni niebla
+        ];
+        const grupo = new THREE.Group();
+        // 3 mallas con instancias para todos los zombis: solo 3 llamadas de dibujo
+        this.mallas = mats.map((mat, c) => {
+          const total = MAX_ZOMBIS * POR_ZOMBI[c];
+          const malla = new THREE.InstancedMesh(geoCaja, mat, total);
+          for (let i = 0; i < total; i++) malla.setColorAt(i, this.colores.golpe);  // reserva el color desde el principio
+          malla.count = 0;
+          malla.frustumCulled = false;
+          grupo.add(malla);
+          return malla;
+        });
+        this.el.setObject3D('zombis', grupo);
+
+        // Las partes que no se mueven se calculan una sola vez
+        this.mA = new THREE.Matrix4();
+        PARTES.forEach(p => { if (!p.giro) p.local = this.local(new THREE.Matrix4(), p, 0); });
+
+        // Reserva de 30 zombis que se reutilizan (no se crea nada nuevo durante la partida)
+        this.activos = [];
+        this.libres = [];
+        for (let i = 0; i < MAX_ZOMBIS; i++) this.libres.push({});
+        this.cuenta = [0, 0, 0];
+        this.base = new THREE.Matrix4();
+        this.m = new THREE.Matrix4();
+        this.q = new THREE.Quaternion();
+        this.pos = new THREE.Vector3();
+        this.esc = new THREE.Vector3();
+        this.p = new THREE.Vector3();
+      },
+
+      local(out, p, angulo) { return matrizParte(out, this.mA, p, angulo); },
+
+      nueva() {
+        this.muertos = 0;  // zombis eliminados en esta partida (los hace más rápidos)
+        while (this.activos.length) this.libres.push(this.activos.pop());
+        for (let i = 0; i < ZOMBIS_INICIO; i++) this.crear(false, 20);
+      },
+
+      crear(aterrador, distancia) {
+        if (this.activos.length >= MAX_ZOMBIS) return;
+        const z = this.libres.pop();
+        this.lugarLejos(z, distancia);
+        Object.assign(z, {
+          y: Mundo.alturaSuelo(z.x, z.z), vy: 0, ang: 0, fase: Math.random() * 6,
+          aterrador, vida: 2, golpe: 0, saltador: false, grunir: 1 + Math.random() * 4
+        });
+        this.activos.push(z);
+        this.ajustarSaltadores();
+        if (this.activos.length > 12 && Juego.dragon) Juego.dragon.zombiNuevo();  // cuenta para el dragón
+      },
+
+      // Busca un sitio al azar lejos de Pepe y fuera del agua (como mucho 40 intentos)
+      lugarLejos(z, distancia) {
+        const c = Juego.cabeza;
+        let mejor = -1;
+        for (let i = 0; i < 40; i++) {
+          const x = 2 + Math.random() * (TAM - 4), zz = 2 + Math.random() * (TAM - 4);
+          let d = Math.hypot(x - c.x, zz - c.z);
+          if (Mundo.alturaSuelo(x, zz) % 1 !== 0) d *= 0.5;  // el agua cuenta como peor sitio
+          if (d > mejor) { mejor = d; z.x = x; z.z = zz; }
+          if (d >= distancia) return;
+        }
+      },
+
+      // Con más de 10 zombis, al menos dos van saltando
+      ajustarSaltadores() {
+        const lista = this.activos, n = lista.length;
+        let cuantos = 0;
+        for (let i = 0; i < n; i++) {
+          if (n <= 10) lista[i].saltador = false;
+          else if (lista[i].saltador) cuantos++;
+        }
+        for (let i = 0; n > 10 && cuantos < 2 && i < n; i++) {
+          if (!lista[i].saltador) { lista[i].saltador = true; cuantos++; }
+        }
+      },
+
+      // ¿Hay un zombi en el punto p? (cada zombi cuenta como un cilindro)
+      tocado(p, margen) {
+        for (let i = 0; i < this.activos.length; i++) {
+          const z = this.activos[i], e = z.aterrador ? 1.25 : 1;
+          if (Math.hypot(p.x - z.x, p.z - z.z) < 0.35 * e + margen && p.y > z.y && p.y < z.y + 2 * e) return z;
+        }
+        return null;
+      },
+
+      // Golpe de espada o martillo: quita una vida al zombi (tiene 2) y lo empuja hacia atrás
+      herir(z, p) {
+        z.vida--;
+        z.golpe = 0.2;  // se pone blanco un momento
+        sonar(estado.herramienta, p);  // 'espada' o 'martillo'
+        this.p.set(z.x, z.y + 1.7, z.z);
+        sonar('grito', this.p);
+        const c = Juego.cabeza, dx = z.x - c.x, dz = z.z - c.z, d = Math.hypot(dx, dz) || 1;
+        z.x += dx / d * 0.8;
+        z.z += dz / d * 0.8;
+        if (z.vida <= 0) this.matar(z);
+      },
+
+      // Elimina un zombi; si había menos de 30, aparecen dos aterradores lejos de Pepe
+      matar(z) {
+        const i = this.activos.indexOf(z);
+        if (i < 0) return;
+        const habia = this.activos.length;
+        this.activos.splice(i, 1);
+        this.libres.push(z);
+        this.muertos++;  // +4 % de velocidad para todos
+        this.p.set(z.x, z.y + 1, z.z);
+        sonar('zombi-muere', this.p);
+        if (habia < MAX_ZOMBIS) { this.crear(true, 15); this.crear(true, 15); }
+        this.ajustarSaltadores();
+      },
+
+      mover(z, seg, i) {
+        const c = Juego.cabeza, lista = this.activos;
+        let dx = c.x - z.x, dz = c.z - z.z;
+        const d = Math.hypot(dx, dz) || 0.001;
+        dx /= d; dz /= d;
+        z.ang = Math.atan2(dx, dz);  // mira hacia Pepe
+        const suelo = Mundo.alturaSuelo(z.x, z.z);
+        // Cada zombi eliminado los hace un 4 % más rápidos, sin pasar de 3,5 m/s (Pepe corre a 4)
+        const rapidez = 1 + 0.04 * this.muertos;
+        let vel = Math.min(VEL_MAX_ZOMBI, (z.aterrador ? 1.9 : 1.4) * rapidez);
+        if (z.saltador) {
+          vel = Math.min(VEL_MAX_ZOMBI, 2.4 * rapidez);
+          z.vy -= 16 * seg;
+          z.y += z.vy * seg;
+          if (z.y <= suelo) { z.y = suelo; z.vy = 5.5; }  // al tocar el suelo, otro salto
+        } else {
+          z.y += (suelo - z.y) * Math.min(1, seg * 10);   // anda pegado al terreno
+        }
+        if (d > 0.6) {
+          z.x += dx * vel * seg;
+          z.z += dz * vel * seg;
+          z.fase += seg * vel * 5;
+        }
+        // Que no se amontonen (con 30 zombis son como mucho 435 parejas)
+        for (let j = i + 1; j < lista.length; j++) {
+          const o = lista[j], sx = z.x - o.x, sz = z.z - o.z, s2 = sx * sx + sz * sz;
+          if (s2 < 0.36 && s2 > 1e-6) {
+            const s = Math.sqrt(s2), emp = (0.6 - s) / s * 0.5;
+            z.x += sx * emp; z.z += sz * emp;
+            o.x -= sx * emp; o.z -= sz * emp;
+          }
+        }
+        z.x = Math.min(TAM - 0.3, Math.max(0.3, z.x));
+        z.z = Math.min(TAM - 0.3, Math.max(0.3, z.z));
+
+        // Ataque: 1 vida menos y 1 segundo de protección
+        if (d < 0.75 && z.y < c.y + 0.5 && z.y > c.y - 2.6 && estado.tiempo >= estado.protegidoHasta) {
+          estado.salud = Math.max(0, estado.salud - 1);
+          estado.protegidoHasta = estado.tiempo + 1;
+          sonar('dano', c);
+        }
+        // Gruñido de vez en cuando si está cerca
+        z.grunir -= seg;
+        if (z.grunir <= 0) {
+          z.grunir = 3 + Math.random() * 4;
+          if (d < 15) { this.p.set(z.x, z.y + 1.7, z.z); sonar('grunido', this.p); }
+        }
+      },
+
+      tick(t, dt) {
+        const seg = Math.min(dt, 100) / 1000;
+        const lista = this.activos, cuenta = this.cuenta;
+        cuenta[0] = cuenta[1] = cuenta[2] = 0;
+        for (let i = 0; i < lista.length; i++) {
+          const z = lista[i];
+          if (estado.jugando) this.mover(z, seg, i);
+          z.golpe = Math.max(0, z.golpe - seg);
+          // Matriz del zombi entero: posición, giro y tamaño (los aterradores son más altos)
+          const e = z.aterrador ? 1.25 : 1;
+          this.pos.set(z.x, z.y, z.z);
+          this.q.setFromAxisAngle(EJE_Y, z.ang);
+          this.esc.set(z.aterrador ? 1.1 : 1, e, z.aterrador ? 1.1 : 1);
+          this.base.compose(this.pos, this.q, this.esc);
+          const col = z.aterrador ? this.colores.aterrador : this.colores.normal;
+          const balanceo = Math.sin(z.fase);
+          for (let k = 0; k < PARTES.length; k++) {
+            const p = PARTES[k];
+            if (p.giro) this.local(this.m, p, balanceo * p.giro);
+            else this.m.copy(p.local);
+            this.m.premultiply(this.base);
+            const n = cuenta[p.capa]++;
+            this.mallas[p.capa].setMatrixAt(n, this.m);
+            this.mallas[p.capa].setColorAt(n, z.golpe > 0 && p.capa < 2 ? this.colores.golpe : col[p.capa]);
+          }
+        }
+        for (let c = 0; c < 3; c++) {
+          const malla = this.mallas[c];
+          malla.count = cuenta[c];
+          malla.instanceMatrix.needsUpdate = true;
+          malla.instanceColor.needsUpdate = true;
+        }
+      }
+    });
+
+    // --- Bola de fuego: reserva fija de 150 en una sola malla (1 llamada de dibujo) ---
+    const MAX_BOLAS = 150, VEL_BOLA = 18, VIDA_BOLA = 4;  // m/s y segundos de vuelo
+    AFRAME.registerComponent('bolas', {
+      init() {
+        Juego.bolas = this;
+        this.malla = new THREE.InstancedMesh(new THREE.SphereGeometry(0.18, 10, 8),
+          new THREE.MeshBasicMaterial({ color: '#ff8a1f', fog: false }), MAX_BOLAS);  // naranja brillante, sin luz
+        this.malla.count = 0;
+        this.malla.frustumCulled = false;
+        this.el.setObject3D('bolas', this.malla);
+        this.lista = [];
+        for (let i = 0; i < MAX_BOLAS; i++) this.lista.push({ x: 0, y: 0, z: 0, dx: 0, dy: 0, dz: 0, vida: 0 });
+        this.prox = 0;  // la siguiente que se usa: como todas duran lo mismo, es siempre la más antigua
+        this.m = new THREE.Matrix4();
+        this.cero = new THREE.Matrix4().makeScale(0, 0, 0);
+        this.pos = new THREE.Vector3();
+        this.dir = new THREE.Vector3();
+        this.q = new THREE.Quaternion();
+
+        // VR: el gatillo de cualquier mando dispara desde ese mando
+        ['manoIzq', 'manoDer'].forEach(id => {
+          const el = document.getElementById(id);
+          el.addEventListener('triggerdown', () => this.dispararMano(el.object3D));
+        });
+        // Ordenador: tecla F o clic derecho, hacia donde se mira
+        window.addEventListener('keydown', e => { if (e.code === 'KeyF' && !e.repeat && estado.modo === 'ordenador') this.dispararCamara(); });
+        window.addEventListener('mousedown', e => {
+          if (e.button === 2 && estado.modo === 'ordenador' && document.pointerLockElement) this.dispararCamara();
+        });
+        window.addEventListener('contextmenu', e => e.preventDefault());  // sin menú del clic derecho
+      },
+
+      vaciar() {
+        this.lista.forEach(b => { b.vida = 0; });
+        this.malla.count = 0;
+      },
+
+      disparar(origen, dir) {
+        if (!estado.jugando || estado.monedas < MONEDAS_BOLA) return;  // se desbloquea con 3 monedas
+        const b = this.lista[this.prox];
+        this.prox = (this.prox + 1) % MAX_BOLAS;
+        b.x = origen.x; b.y = origen.y; b.z = origen.z;
+        b.dx = dir.x * VEL_BOLA; b.dy = dir.y * VEL_BOLA; b.dz = dir.z * VEL_BOLA;
+        b.vida = VIDA_BOLA;
+        this.malla.count = MAX_BOLAS;
+        sonar('rugido', origen);
+      },
+      // Desde el mando: sale hacia donde apunta (su eje -Z)
+      dispararMano(obj) {
+        obj.getWorldPosition(this.pos);
+        obj.getWorldQuaternion(this.q);
+        this.dir.set(0, 0, -1).applyQuaternion(this.q);
+        this.pos.addScaledVector(this.dir, 0.15);
+        this.disparar(this.pos, this.dir);
+      },
+      // Desde la cámara del ordenador: sale un poco por debajo de los ojos
+      dispararCamara() {
+        const cam = this.el.sceneEl.camera;
+        cam.getWorldPosition(this.pos);
+        cam.getWorldDirection(this.dir);
+        this.pos.addScaledVector(this.dir, 0.6).y -= 0.15;
+        this.disparar(this.pos, this.dir);
+      },
+
+      tick(t, dt) {
+        if (!this.malla.count) return;
+        const seg = Math.min(dt, 100) / 1000, zs = Juego.zombis.activos;
+        for (let i = 0; i < MAX_BOLAS; i++) {
+          const b = this.lista[i];
+          if (b.vida > 0) {
+            b.vida -= seg;
+            b.x += b.dx * seg; b.y += b.dy * seg; b.z += b.dz * seg;
+            this.pos.set(b.x, b.y, b.z);
+            // Choca con el terreno: explota (no rompe bloques)
+            const tb = Mundo.tipo(Math.floor(b.x), Math.floor(b.y), Math.floor(b.z));
+            if (tb !== AIRE && tb !== AGUA) { b.vida = 0; sonar('explosion', this.pos); }
+            else if (estado.jugando) {
+              for (let k = 0; k < zs.length; k++) {
+                const z = zs[k], ex = b.x - z.x;
+                if (ex > 1 || ex < -1) continue;           // descarte rápido: lejos en X
+                const ez = b.z - z.z;
+                if (ez > 1 || ez < -1) continue;           // lejos en Z
+                const e = z.aterrador ? 1.25 : 1, r = 0.35 * e + 0.2;
+                if (ex * ex + ez * ez < r * r && b.y > z.y && b.y < z.y + 2 * e) {  // distancia al cuadrado
+                  b.vida = 0;
+                  sonar('explosion', this.pos);
+                  Juego.zombis.matar(z);  // de un impacto; matar() crea los dos zombis nuevos
+                  break;
+                }
+              }
+            }
+          }
+          if (b.vida > 0) this.malla.setMatrixAt(i, this.m.makeTranslation(b.x, b.y, b.z));
+          else this.malla.setMatrixAt(i, this.cero);
+        }
+        this.malla.instanceMatrix.needsUpdate = true;
+      }
+    });
+
+    // --- Partida: reloj, ganar o perder y panel de fin ---
+    AFRAME.registerComponent('partida', {
+      init() {
+        Juego.partida = this;
+        // Panel 3D de fin de partida (para VR), dibujado en un lienzo
+        this.lienzo = document.createElement('canvas');
+        this.lienzo.width = 512; this.lienzo.height = 320;
+        this.textura = new THREE.CanvasTexture(this.lienzo);
+        this.panel = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.75),
+          new THREE.MeshBasicMaterial({ map: this.textura, fog: false, transparent: true, depthTest: false }));
+        this.panel.renderOrder = 10;  // siempre por delante
+        this.panel.visible = false;
+        this.el.sceneEl.object3D.add(this.panel);
+        this.v = new THREE.Vector3();
+        this.d = new THREE.Vector3();
+      },
+
+      tick(t, dt) {
+        if (!estado.jugando) return;
+        estado.tiempo += Math.min(dt, 100) / 1000;
+        if (estado.monedas >= MONEDAS) this.terminar(true);
+        else if (estado.salud <= 0) this.terminar(false);
+      },
+
+      terminar(ganado) {
+        estado.jugando = false;
+        estado.fin = ganado ? 'ganado' : 'perdido';
+        estado.finEn = performance.now();
+        // Récord: solo al ganar, si es el primero o más rápido que el guardado
+        const nuevoRecord = ganado && (estado.mejorTiempo === null || estado.tiempo < estado.mejorTiempo);
+        if (nuevoRecord) { estado.mejorTiempo = estado.tiempo; guardar(); }
+        // Al perder, el guardado ya apunta a un paisaje nuevo (por si se recarga la página antes de volver a jugar)
+        if (!ganado) guardar(Math.floor(Math.random() * 1e9), []);
+        document.getElementById('mejor-tiempo').textContent = formatoTiempo(estado.mejorTiempo);
+        const record = nuevoRecord ? '¡Nuevo récord!' : 'Récord: ' + formatoTiempo(estado.mejorTiempo);
+        sonar(ganado ? 'ganar' : 'perder', Juego.cabeza);
+        const titulo = ganado ? '¡Has ganado!' : 'Has perdido';
+        const tiempo = 'Tiempo: ' + formatoTiempo(estado.tiempo);
+        if (estado.modo === 'vr') {
+          pintarLineas(this.lienzo, [titulo, tiempo, record, 'Pulsa A o el gatillo derecho', 'para volver a jugar'], [60, 38, 36, 26, 26]);
+          this.textura.needsUpdate = true;
+          // Lo ponemos 1,5 m delante de Pepe, mirándole
+          const cam = this.el.sceneEl.camera;
+          cam.getWorldPosition(this.v);
+          cam.getWorldDirection(this.d);
+          this.d.y = 0;
+          if (this.d.lengthSq() < 1e-6) this.d.set(0, 0, -1);
+          this.d.normalize();
+          this.panel.position.copy(this.v).addScaledVector(this.d, 1.5);
+          this.panel.lookAt(this.v);
+          this.panel.visible = true;
+        } else {
+          document.getElementById('fin-titulo').textContent = titulo;
+          document.getElementById('fin-tiempo').textContent = tiempo;
+          document.getElementById('fin-record').textContent = record;
+          document.getElementById('fin').classList.remove('oculto');
+          if (document.pointerLockElement) document.exitPointerLock();  // soltamos el ratón para pulsar el botón
+        }
+      },
+
+      ocultarFin() {
+        this.panel.visible = false;
+        document.getElementById('fin').classList.add('oculto');
+      }
+    });
+
+    // --- Animales: vacas y ovejas de cajas que pasean (una sola malla para todos) ---
+    // Cada parte: piv = articulación, off = desplazamiento, tam = tamaño, giro = balanceo al andar, color
+    const BLANCO = '#f4f1ea', MARRON = '#7a4a26', LANA = '#efe6cf', CARA = '#3b3330';
+    // Cara de enfado: ojos rojos por delante de los normales y cejas oscuras inclinadas hacia dentro.
+    // Estas piezas solo se ven mientras el animal está enfadado (enfado: true).
+    const caraEnfado = (ojoX, ojoY, frente, ojo, ceja) => [-1, 1].flatMap(lado => [
+      { piv: [lado * ojoX, ojoY, frente], off: [0, 0, 0], tam: [ojo, ojo, 0.02], color: '#e01010', enfado: true },
+      { piv: [lado * ojoX, ojoY + ojo * 0.9, frente], off: [0, 0, 0], tam: [ceja, 0.03, 0.03], rz: lado * 0.5, color: '#141010', enfado: true }
+    ]);
+    const patas = (ancho, largo, alto, grosor, color) => [[-1, 1], [1, -1], [-1, -1], [1, 1]].map(([lx, lz], i) =>
+      ({ piv: [lx * ancho, alto, lz * largo], off: [0, -alto / 2, 0], tam: [grosor, alto, grosor], giro: i < 2 ? 0.5 : -0.5, color }));
+    const CUERPOS = {
+      vaca: [
+        { piv: [0, 0.95, 0], off: [0, 0, 0], tam: [0.7, 0.6, 1.2], color: BLANCO },            // cuerpo
+        { piv: [0.352, 1.0, 0.1], off: [0, 0, 0], tam: [0.02, 0.3, 0.45], color: MARRON },    // manchas
+        { piv: [-0.352, 0.9, -0.25], off: [0, 0, 0], tam: [0.02, 0.28, 0.35], color: MARRON },
+        { piv: [0.1, 1.252, -0.2], off: [0, 0, 0], tam: [0.35, 0.02, 0.4], color: MARRON },
+        { piv: [0, 1.15, 0.72], off: [0, 0, 0], tam: [0.42, 0.42, 0.38], color: BLANCO },      // cabeza
+        { piv: [0, 1.03, 0.93], off: [0, 0, 0], tam: [0.3, 0.18, 0.06], color: '#e9a3a0' },   // hocico
+        { piv: [-0.12, 1.24, 0.915], off: [0, 0, 0], tam: [0.06, 0.06, 0.02], color: '#222222' }, // ojos
+        { piv: [0.12, 1.24, 0.915], off: [0, 0, 0], tam: [0.06, 0.06, 0.02], color: '#222222' },
+        { piv: [-0.17, 1.4, 0.72], off: [0, 0, 0], tam: [0.06, 0.1, 0.06], color: '#e8dcb8' }, // cuernos
+        { piv: [0.17, 1.4, 0.72], off: [0, 0, 0], tam: [0.06, 0.1, 0.06], color: '#e8dcb8' }
+      ].concat(patas(0.22, 0.42, 0.65, 0.18, '#ece6da'), caraEnfado(0.12, 1.24, 0.93, 0.07, 0.12)),
+      oveja: [
+        { piv: [0, 0.85, 0], off: [0, 0, 0], tam: [0.72, 0.62, 1.0], color: LANA },          // lana
+        { piv: [0, 1.0, 0.6], off: [0, 0, 0], tam: [0.32, 0.34, 0.34], color: CARA },        // cabeza oscura
+        { piv: [0, 1.2, 0.58], off: [0, 0, 0], tam: [0.34, 0.08, 0.3], color: LANA },         // flequillo de lana
+        { piv: [-0.09, 1.04, 0.772], off: [0, 0, 0], tam: [0.05, 0.05, 0.02], color: '#f6f6f6' }, // ojos
+        { piv: [0.09, 1.04, 0.772], off: [0, 0, 0], tam: [0.05, 0.05, 0.02], color: '#f6f6f6' },
+        { piv: [-0.2, 1.06, 0.56], off: [0, 0, 0], tam: [0.1, 0.05, 0.08], color: CARA },      // orejas
+        { piv: [0.2, 1.06, 0.56], off: [0, 0, 0], tam: [0.1, 0.05, 0.08], color: CARA }
+      ].concat(patas(0.2, 0.32, 0.55, 0.14, CARA), caraEnfado(0.09, 1.04, 0.786, 0.06, 0.11))
+    };
+    const ANIMALES_POR_ESPECIE = 6;
+    const VEL_HUIDA = 3.5;                  // m/s al huir enfadados (Pepe corre a 4)
+    const DESVIOS = [0, 0.8, -0.8, 1.6, -1.6];  // si no puede huir recto, prueba estos giros (radianes)
+
+    AFRAME.registerComponent('animales', {
+      init() {
+        Juego.animales = this;
+        this.lista = [];
+        ['vaca', 'oveja'].forEach(especie => {
+          for (let i = 0; i < ANIMALES_POR_ESPECIE; i++) this.lista.push({ especie, x: 0, y: 0, z: 0, ang: 0, andando: false, t: 0, fase: 0, voz: 0, enfado: 0 });
+        });
+        const total = this.lista.reduce((n, a) => n + CUERPOS[a.especie].length, 0);
+        this.malla = new THREE.InstancedMesh(geoCaja, new THREE.MeshLambertMaterial({ map: TEX.pelo() }), total);
+        this.malla.frustumCulled = false;
+        // El color de cada parte no cambia nunca: se pone una sola vez
+        const color = new THREE.Color();
+        let n = 0;
+        this.lista.forEach(a => CUERPOS[a.especie].forEach(p => this.malla.setColorAt(n++, color.set(p.color))));
+        this.el.setObject3D('animales', this.malla);
+        this.base = new THREE.Matrix4();
+        this.m = new THREE.Matrix4();
+        this.aux = new THREE.Matrix4();
+        this.q = new THREE.Quaternion();
+        this.pos = new THREE.Vector3();
+        this.uno = new THREE.Vector3(1, 1, 1);
+        this.cero = new THREE.Matrix4().makeScale(0, 0, 0);  // las piezas de enfado, sin enfado, no se ven
+        this.repartir();
+      },
+
+      // ¿Hay un animal en el punto p? (cada animal cuenta como un cilindro)
+      tocado(p, margen) {
+        for (let i = 0; i < this.lista.length; i++) {
+          const a = this.lista[i], r = (a.especie === 'vaca' ? 0.7 : 0.6) + margen, dx = p.x - a.x, dz = p.z - a.z;
+          if (dx * dx + dz * dz < r * r && p.y > a.y + 0.2 && p.y < a.y + 1.5) return a;
+        }
+        return null;
+      },
+
+      // Espadazo: grito furioso, cara de enfado unos 3 s y huida. No pueden morir.
+      enfadar(a) {
+        a.enfado = 3;
+        a.andando = true;
+        this.pos.set(a.x, a.y + 1, a.z);
+        sonar(a.especie === 'vaca' ? 'mugidoEnfadado' : 'balidoEnfadado', this.pos);
+      },
+
+      // ¿Puede ir a (nx, nz)? No se meten en el agua, no se salen del mapa y no trepan más de un bloque
+      puedeIr(a, nx, nz, suelo) {
+        const delante = Mundo.alturaSuelo(nx + Math.sin(a.ang) * 0.6, nz + Math.cos(a.ang) * 0.6);
+        return nx >= 1 && nx <= TAM - 1 && nz >= 1 && nz <= TAM - 1 && delante % 1 === 0 && Math.abs(delante - suelo) <= 1;
+      },
+
+      // Pone cada animal en tierra firme, al azar
+      repartir() {
+        this.lista.forEach(a => {
+          for (let i = 0; i < 40; i++) {
+            a.x = 2 + Math.random() * (TAM - 4); a.z = 2 + Math.random() * (TAM - 4);
+            if (Mundo.alturaSuelo(a.x, a.z) % 1 === 0 && Math.hypot(a.x - TAM / 2, a.z - TAM / 2) > 4) break;
+          }
+          a.y = Mundo.alturaSuelo(a.x, a.z);
+          a.ang = Math.random() * 6.28;
+          a.t = Math.random() * 3;
+          a.voz = 5 + Math.random() * 15;
+          a.enfado = 0;
+        });
+      },
+
+      // Paseo errático: anda un rato, se para, cambia de dirección
+      mover(a, seg) {
+        const suelo = Mundo.alturaSuelo(a.x, a.z);
+        if (a.enfado > 0) {
+          // Enfadado: corre lejos de Pepe (si choca, prueba a desviarse un poco)
+          a.enfado -= seg;
+          const huida = Math.atan2(a.x - Juego.cabeza.x, a.z - Juego.cabeza.z);
+          for (let i = 0; i < DESVIOS.length; i++) {
+            a.ang = huida + DESVIOS[i];
+            const nx = a.x + Math.sin(a.ang) * VEL_HUIDA * seg, nz = a.z + Math.cos(a.ang) * VEL_HUIDA * seg;
+            if (this.puedeIr(a, nx, nz, suelo)) { a.x = nx; a.z = nz; a.fase += seg * 14; break; }
+          }
+          a.y += (suelo - a.y) * Math.min(1, seg * 8);
+          return;
+        }
+        a.t -= seg;
+        if (a.t <= 0) {
+          a.andando = !a.andando;
+          a.t = a.andando ? 2 + Math.random() * 4 : 1 + Math.random() * 3;
+          if (a.andando) a.ang += (Math.random() - 0.5) * 2.5;
+        }
+        if (a.andando) {
+          a.ang += (Math.random() - 0.5) * seg * 2;
+          const nx = a.x + Math.sin(a.ang) * 0.7 * seg, nz = a.z + Math.cos(a.ang) * 0.7 * seg;
+          if (!this.puedeIr(a, nx, nz, suelo)) a.ang += Math.PI * (0.5 + Math.random() * 0.5);
+          else { a.x = nx; a.z = nz; a.fase += seg * 6; }
+        }
+        a.y += (suelo - a.y) * Math.min(1, seg * 8);
+        a.voz -= seg;
+        if (a.voz <= 0) {
+          a.voz = 8 + Math.random() * 14;
+          this.pos.set(a.x, a.y + 1, a.z);
+          sonar(a.especie === 'vaca' ? 'mugido' : 'balido', this.pos);
+        }
+      },
+
+      tick(t, dt) {
+        const seg = Math.min(dt, 100) / 1000;
+        let n = 0;
+        for (let i = 0; i < this.lista.length; i++) {
+          const a = this.lista[i];
+          this.mover(a, seg);
+          this.pos.set(a.x, a.y, a.z);
+          this.q.setFromAxisAngle(EJE_Y, a.ang);
+          this.base.compose(this.pos, this.q, this.uno);
+          const balanceo = a.andando ? Math.sin(a.fase) : 0;
+          const partes = CUERPOS[a.especie];
+          for (let k = 0; k < partes.length; k++) {
+            const p = partes[k];
+            if (p.enfado && !(a.enfado > 0)) { this.malla.setMatrixAt(n++, this.cero); continue; }  // cara normal
+            matrizParte(this.m, this.aux, p, p.giro ? balanceo * p.giro : 0);
+            this.malla.setMatrixAt(n++, this.m.premultiply(this.base));
+          }
+        }
+        this.malla.instanceMatrix.needsUpdate = true;
+      }
+    });
+
+    // --- Copa del salto y dragón ---
+    // Copa dorada: cajas de diseño propio (centro en el origen, se ve flotando sobre el suelo)
+    const ORO = '#ffcf3a', ORO_OSCURO = '#d99a12';
+    const COPA = [
+      { piv: [0, -0.3, 0], tam: [0.36, 0.06, 0.36], color: ORO_OSCURO },  // base
+      { piv: [0, -0.16, 0], tam: [0.08, 0.22, 0.08], color: ORO },        // pie
+      { piv: [0, 0.1, 0], tam: [0.34, 0.3, 0.34], color: ORO },           // vaso
+      { piv: [0, 0.27, 0], tam: [0.42, 0.05, 0.42], color: ORO_OSCURO },  // borde
+      { piv: [-0.24, 0.12, 0], tam: [0.06, 0.18, 0.06], color: ORO_OSCURO }, // asas
+      { piv: [0.24, 0.12, 0], tam: [0.06, 0.18, 0.06], color: ORO_OSCURO }
+    ];
+    // Dragón de diseño propio, mirando hacia +Z: cuerpo morado oscuro, alas naranjas y ojos amarillos.
+    // ala: 1 o -1 = lado de la pieza que aletea. Envergadura: 2 × (0,7 + 3,4) ≈ 8 m.
+    const MORADO = '#3d1f5c', MORADO_CLARO = '#5a2f80', NARANJA = '#ff8a2a';
+    const DRAGON = [
+      { piv: [0, 0, 0], tam: [1.4, 1.2, 4], color: MORADO },             // cuerpo
+      { piv: [0, -0.35, 0.2], tam: [1.1, 0.5, 3], color: MORADO_CLARO },  // tripa
+      { piv: [0, 0.4, 2.5], tam: [0.7, 0.7, 1.4], color: MORADO },       // cuello
+      { piv: [0, 0.6, 3.6], tam: [1, 0.8, 1.3], color: MORADO },         // cabeza
+      { piv: [0, 0.4, 4.5], tam: [0.7, 0.45, 0.7], color: MORADO_CLARO }, // hocico
+      { piv: [-0.36, 0.82, 4.26], tam: [0.22, 0.16, 0.06], color: '#ffe23a' },  // ojos
+      { piv: [0.36, 0.82, 4.26], tam: [0.22, 0.16, 0.06], color: '#ffe23a' },
+      { piv: [0, 0.15, -3.3], tam: [0.6, 0.6, 2.6], color: MORADO },     // cola
+      { piv: [0, 0.3, -5.2], tam: [0.3, 0.3, 1.4], color: MORADO_CLARO }, // punta de la cola
+      { piv: [-0.45, -0.8, -0.9], tam: [0.35, 0.7, 0.35], color: MORADO }, // patas
+      { piv: [0.45, -0.8, -0.9], tam: [0.35, 0.7, 0.35], color: MORADO }
+    ];
+    [-1, 1].forEach(lado => DRAGON.push(
+      { piv: [lado * 0.7, 0.4, 0.4], off: [lado * 1.7, 0, 0], tam: [3.4, 0.08, 2.2], ala: lado, color: NARANJA },        // membrana
+      { piv: [lado * 0.7, 0.4, 0.4], off: [lado * 1.7, 0.06, 1.05], tam: [3.4, 0.2, 0.22], ala: lado, color: MORADO }    // hueso del ala
+    ));
+    [COPA, DRAGON].forEach(lista => lista.forEach(p => { p.off = p.off || [0, 0, 0]; }));
+    const SEGMENTOS = 24, LLAMAS = 120, RADIO_FUEGO = 2;  // círculo rojo y partículas de la llamarada
+    const COPA_SEGUNDOS = 20, VEL_DRAGON = 14;
+
+    AFRAME.registerComponent('copa-y-dragon', {
+      init() {
+        Juego.dragon = this;
+        this.contador = 0;  // zombis nuevos contados para el próximo dragón
+        // Malla 1 (con luz): el dragón entero
+        this.cuerpo = new THREE.InstancedMesh(geoCaja, new THREE.MeshLambertMaterial(), DRAGON.length);
+        // Malla 2 (sin luz, brilla): copa + círculo rojo + partículas de fuego, una sola reserva fija
+        this.brillos = new THREE.InstancedMesh(geoCaja, new THREE.MeshBasicMaterial({ fog: false }), COPA.length + SEGMENTOS + LLAMAS);
+        this.iCirculo = COPA.length;
+        this.iLlamas = COPA.length + SEGMENTOS;
+        const color = new THREE.Color();
+        DRAGON.forEach((p, i) => this.cuerpo.setColorAt(i, color.set(p.color)));
+        COPA.forEach((p, i) => this.brillos.setColorAt(i, color.set(p.color)));
+        for (let i = 0; i < SEGMENTOS; i++) this.brillos.setColorAt(this.iCirculo + i, color.set('#ff1e1e'));
+        const fuego = ['#ff3a10', '#ff7a1a', '#ffb020', '#ffe060'];
+        for (let i = 0; i < LLAMAS; i++) this.brillos.setColorAt(this.iLlamas + i, color.set(fuego[i % 4]));
+        this.cuerpo.frustumCulled = this.brillos.frustumCulled = false;
+        this.cuerpo.visible = false;
+        this.el.setObject3D('dragon', this.cuerpo);
+        this.el.setObject3D('brillos', this.brillos);
+        // Objetos de trabajo, creados una sola vez
+        this.m = new THREE.Matrix4(); this.aux = new THREE.Matrix4(); this.base = new THREE.Matrix4();
+        this.q = new THREE.Quaternion(); this.pos = new THREE.Vector3(); this.esc = new THREE.Vector3();
+        this.cero = new THREE.Matrix4().makeScale(0, 0, 0);
+        this.azarLlamas = new Float32Array(LLAMAS * 3);  // por partícula: ángulo, distancia y desfase
+        this.copa = { x: 0, z: 0, cogida: true };
+        this.d = { activo: false, x: 0, y: 0, z: 0, dx: 0, dz: 0, t: 0, marcado: false, espera: 0, cx: 0, cy: 0, cz: 0, fuego: -1 };
+        for (let i = 0; i < this.brillos.count; i++) this.brillos.setMatrixAt(i, this.cero);
+      },
+
+      // Nueva partida: sin dragón, contador a cero y copa en otro sitio
+      nueva() {
+        this.contador = 0;
+        this.d.activo = false; this.d.espera = 0; this.d.fuego = -1;
+        this.cuerpo.visible = false;
+        for (let i = this.iCirculo; i < this.brillos.count; i++) this.brillos.setMatrixAt(i, this.cero);
+        // Copa: a más de 20 m de la salida, en lo más alto (colina) o lo más bajo sin agua (valle)
+        const colina = Math.random() < 0.5;
+        let mejor = colina ? -1 : 99, empates = 0;
+        for (let x = 2; x < TAM - 2; x++) for (let z = 2; z < TAM - 2; z++) {
+          if (Math.hypot(x + 0.5 - TAM / 2, z + 0.5 - TAM / 2) <= 20) continue;
+          const h = Mundo.alturaSuelo(x + 0.5, z + 0.5);
+          if (h % 1 !== 0) continue;  // agua
+          if (colina ? h > mejor : h < mejor) { mejor = h; empates = 1; this.copa.x = x + 0.5; this.copa.z = z + 0.5; }
+          else if (h === mejor && Math.random() < 1 / ++empates) { this.copa.x = x + 0.5; this.copa.z = z + 0.5; }  // empate: al azar
+        }
+        this.copa.cogida = false;
+      },
+
+      // Lo llama "zombis" cada vez que aparece uno con más de 12: cada 4, un dragón (si no hay ya uno)
+      zombiNuevo() {
+        if (++this.contador < 4) return;
+        this.contador = 0;
+        if (this.d.activo || !estado.jugando) return;
+        // Entra desde 45 m, alto, en línea recta para pasar justo por encima de Pepe
+        const c = Juego.cabeza, d = this.d, ang = Math.random() * Math.PI * 2;
+        Object.assign(d, { activo: true, dx: Math.sin(ang), dz: Math.cos(ang), t: 0, marcado: false, espera: 0 });
+        d.x = c.x - d.dx * 45; d.z = c.z - d.dz * 45; d.y = c.y + 12;
+        this.cuerpo.visible = true;
+      },
+
+      // Marca el círculo rojo en el suelo, donde está Pepe ahora (cada trozo a la altura de su columna)
+      marcar() {
+        const d = this.d, c = Juego.cabeza;
+        d.cx = c.x; d.cz = c.z; d.cy = Mundo.alturaSuelo(c.x, c.z);
+        d.marcado = true; d.espera = 1.5;
+        this.pos.set(d.x, d.y, d.z);
+        sonar('dragon', this.pos);
+        this.esc.set(0.55, 0.04, 0.15);
+        for (let i = 0; i < SEGMENTOS; i++) {
+          const a = i / SEGMENTOS * Math.PI * 2, x = d.cx + Math.sin(a) * RADIO_FUEGO, z = d.cz + Math.cos(a) * RADIO_FUEGO;
+          this.pos.set(x, Mundo.alturaSuelo(x, z) + 0.05, z);
+          this.q.setFromAxisAngle(EJE_Y, a + Math.PI / 2);  // cada trozo, tangente al círculo
+          this.brillos.setMatrixAt(this.iCirculo + i, this.m.compose(this.pos, this.q, this.esc));
+        }
+      },
+
+      // Cae la columna de llamas sobre el círculo: si Pepe sigue dentro, pierde 1 vida
+      llamarada() {
+        const d = this.d, c = Juego.cabeza;
+        d.fuego = 0;
+        for (let i = 0; i < SEGMENTOS; i++) this.brillos.setMatrixAt(this.iCirculo + i, this.cero);
+        for (let i = 0; i < LLAMAS * 3; i += 3) {
+          this.azarLlamas[i] = Math.random() * Math.PI * 2;
+          this.azarLlamas[i + 1] = RADIO_FUEGO * Math.sqrt(Math.random());  // repartidas por todo el círculo
+          this.azarLlamas[i + 2] = Math.random();
+        }
+        this.pos.set(d.cx, d.cy + 1, d.cz);
+        sonar('llamarada', this.pos);
+        if (Math.hypot(c.x - d.cx, c.z - d.cz) < RADIO_FUEGO && c.y - d.cy < 5 && estado.tiempo >= estado.protegidoHasta) {
+          estado.salud = Math.max(0, estado.salud - 1);
+          estado.protegidoHasta = estado.tiempo + 1;
+          sonar('dano', c);
+        }
+      },
+
+      tick(t, dt) {
+        const seg = Math.min(dt, 100) / 1000, c = Juego.cabeza, d = this.d, b = this.brillos;
+        if (!estado.jugando) return;
+
+        // Fin del salto de la copa
+        if (estado.copaHasta && estado.tiempo >= estado.copaHasta) { estado.copaHasta = 0; sonar('finCopa'); }
+
+        // Copa: gira despacio y flota; se coge al tocarla
+        const copa = this.copa;
+        if (!copa.cogida) {
+          const y = Mundo.alturaSuelo(copa.x, copa.z) + 0.6 + Math.sin(t / 500) * 0.08;
+          this.pos.set(copa.x, y, copa.z);
+          if (Math.hypot(c.x - copa.x, c.z - copa.z) < 0.9 && y > c.y - 2.3 && y < c.y + 0.6) {
+            copa.cogida = true;
+            estado.copaHasta = estado.tiempo + COPA_SEGUNDOS;
+            sonar('copa', this.pos);
+          }
+        }
+        if (copa.cogida) for (let i = 0; i < COPA.length; i++) b.setMatrixAt(i, this.cero);
+        else {
+          this.q.setFromAxisAngle(EJE_Y, t / 1500);
+          this.base.compose(this.pos, this.q, this.esc.set(1.3, 1.3, 1.3));
+          for (let i = 0; i < COPA.length; i++) b.setMatrixAt(i, matrizParte(this.m, this.aux, COPA[i], 0).premultiply(this.base));
+        }
+
+        // Dragón: vuela recto, pasa por encima de Pepe, ruge y marca; 1,5 s después, llamarada; luego se va
+        if (d.activo) {
+          d.t += seg;
+          d.x += d.dx * VEL_DRAGON * seg; d.z += d.dz * VEL_DRAGON * seg;
+          if (d.marcado) d.y += 3 * seg;  // se aleja subiendo
+          else if ((c.x - d.x) * d.dx + (c.z - d.z) * d.dz <= 0) this.marcar();  // ya está encima de Pepe
+          if (d.espera > 0 && (d.espera -= seg) <= 0) this.llamarada();
+          if (d.t > 9) { d.activo = false; this.cuerpo.visible = false; }
+          // Cuerpo con las alas aleteando
+          const aleteo = Math.sin(d.t * 4) * 0.45;
+          this.pos.set(d.x, d.y, d.z);
+          this.q.setFromAxisAngle(EJE_Y, Math.atan2(d.dx, d.dz));
+          this.base.compose(this.pos, this.q, this.esc.set(1, 1, 1));
+          for (let i = 0; i < DRAGON.length; i++) {
+            const p = DRAGON[i];
+            this.cuerpo.setMatrixAt(i, matrizParte(this.m, this.aux, p, 0, p.ala ? p.ala * aleteo : 0).premultiply(this.base));
+          }
+          this.cuerpo.instanceMatrix.needsUpdate = true;
+        }
+
+        // Llamas: cada partícula cae en bucle por la columna (12 m) durante 1,2 s
+        if (d.fuego >= 0) {
+          d.fuego += seg;
+          const fin = d.fuego > 1.2;
+          for (let i = 0; i < LLAMAS; i++) {
+            if (fin) { b.setMatrixAt(this.iLlamas + i, this.cero); continue; }
+            const a = this.azarLlamas[i * 3], r = this.azarLlamas[i * 3 + 1], f = this.azarLlamas[i * 3 + 2];
+            const caida = (d.fuego * 1.6 + f) % 1;  // 0 arriba, 1 en el suelo
+            const tam = 0.25 + 0.3 * caida + 0.1 * Math.sin(t / 40 + i);  // crecen al bajar y parpadean
+            this.pos.set(d.cx + Math.sin(a) * r, d.cy + 12 * (1 - caida), d.cz + Math.cos(a) * r);
+            b.setMatrixAt(this.iLlamas + i, this.m.compose(this.pos, this.q.identity(), this.esc.set(tam, tam, tam)));
+          }
+          if (fin) d.fuego = -1;
+        }
+        b.instanceMatrix.needsUpdate = true;
+      }
+    });
+
+    // --- Marcador en el cielo: unido a la cámara, un poco por encima del centro (VR) ---
+    // En el ordenador se usa #marcador, arriba en el centro de la pantalla.
+    AFRAME.registerComponent('marcador', {
+      init() {
+        this.lienzo = document.createElement('canvas');
+        this.lienzo.width = 1024; this.lienzo.height = 256;  // proporción 4:1, igual que el plano
+        this.textura = new THREE.CanvasTexture(this.lienzo);
+        // Plano de 1,8 × 0,45 m a 2,7 m: ocupa unos 37° de ancho del campo de visión
+        this.panel = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.45),
+          new THREE.MeshBasicMaterial({ map: this.textura, fog: false, transparent: true, depthTest: false, depthWrite: false }));
+        const sube = 11 * Math.PI / 180;        // 11° por encima del centro de la mirada
+        this.panel.position.set(0, 2.7 * Math.sin(sube), -2.7 * Math.cos(sube));
+        this.panel.rotation.x = sube;           // inclinado para mirar a los ojos
+        this.panel.renderOrder = 20;            // siempre visible, por delante de los bloques
+        this.panel.visible = false;
+        this.el.object3D.add(this.panel);
+        this.visto = {};  // últimos valores mostrados
+        this.grande = document.getElementById('marc-grande');
+        this.pequeno = document.getElementById('marc-pequeno');
+      },
+
+      // Dibuja el marcador del cielo: arriba en grande y abajo en pequeño
+      pintar(grande, pequeno) {
+        const ctx = this.lienzo.getContext('2d'), w = this.lienzo.width, h = this.lienzo.height;
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = 'rgba(34, 48, 63, 0.6)';
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        // Si el texto no cabe, se reduce la letra hasta que cabe (con 30 px de margen a cada lado)
+        const escribir = (texto, tam, y) => {
+          do ctx.font = 'bold ' + tam + 'px system-ui, Arial, sans-serif';
+          while (ctx.measureText(texto).width > w - 60 && (tam -= 4) > 12);
+          ctx.fillText(texto, w / 2, y);
+        };
+        escribir(grande, 84, 92);
+        escribir(pequeno, 44, 198);
+        this.textura.needsUpdate = true;
+      },
+
+      tick() {
+        // Solo se redibuja si algo ha cambiado
+        const v = this.visto, modo = estado.modo, seg = Math.floor(estado.tiempo);
+        const zombis = Juego.zombis ? Juego.zombis.activos.length : 0;
+        const copa = estado.copaHasta > estado.tiempo ? Math.ceil(estado.copaHasta - estado.tiempo) : 0;  // cuenta atrás
+        if (v.modo === modo && v.seg === seg && v.salud === estado.salud && v.monedas === estado.monedas && v.zombis === zombis && v.copa === copa) return;
+        v.modo = modo; v.seg = seg; v.salud = estado.salud; v.monedas = estado.monedas; v.zombis = zombis; v.copa = copa;
+
+        const html = document.getElementById('marcador');
+        this.panel.visible = modo === 'vr';
+        html.style.display = modo === 'ordenador' ? 'block' : 'none';
+        if (!modo) return;
+        const grande = formatoTiempo(seg) + '   Vidas ' + estado.salud + '/' + VIDAS + '   Monedas ' + estado.monedas + '/' + MONEDAS;
+        const pequeno = 'Zombis ' + zombis + '   ·   Bola de fuego: ' + (estado.monedas >= MONEDAS_BOLA ? 'lista' : 'bloqueada (3 monedas)') +
+          (copa ? '   ·   Copa: salto ×2 ' + copa + ' s' : '');
+        if (modo === 'vr') this.pintar(grande, pequeno);
+        else { this.grande.textContent = grande; this.pequeno.textContent = pequeno; }
+      }
+    });
+  </script>
+</head>
+<body>
+  <!-- ===== Pantalla de inicio ===== -->
+  <div id="inicio">
+    <div class="tarjeta">
+      <div class="logo" aria-hidden="true">P</div>
+      <h1>Pepe<span>Craft</span></h1>
+      <p class="record">Mejor tiempo: <strong id="mejor-tiempo">—</strong></p>
+      <div class="botones">
+        <button id="btn-ordenador" class="principal">Jugar en el ordenador</button>
+        <button id="btn-vr" class="secundario">Entrar en realidad virtual</button>
+        <div class="fila">
+          <button id="btn-nuevo" class="secundario">Mundo nuevo</button>
+          <button id="btn-sonido" class="secundario">Sonido: sí</button>
+        </div>
+      </div>
+      <p class="nota" id="nota-vr">Pulsa Intro para jugar en el ordenador.</p>
+    </div>
+  </div>
+
+  <!-- ===== Fin de partida (en el ordenador) ===== -->
+  <div id="fin" class="oculto">
+    <div class="tarjeta">
+      <h2 id="fin-titulo"></h2>
+      <p class="record" id="fin-tiempo"></p>
+      <p class="record" id="fin-record"></p>
+      <div class="botones"><button id="btn-otra" class="principal">Volver a jugar</button></div>
+      <p class="nota">o pulsa Intro</p>
+    </div>
+  </div>
+
+  <div id="ayuda">WASD: andar · Espacio: saltar (dos veces: doble salto) · Ratón: mirar · Clic: golpear · Q: cambiar herramienta · F o clic derecho: bola de fuego (con 3 monedas) · Esc: soltar el ratón</div>
+  <div id="aviso-raton">Haz clic para volver a mirar con el ratón</div>
+  <div id="marcador"><div id="marc-grande"></div><div id="marc-pequeno"></div></div>
+
+  <!-- ===== La escena 3D ===== -->
+  <a-scene id="escena"
+    renderer="antialias: true; highRefreshRate: true; foveationLevel: 1"
+    xr-mode-ui="enabled: false" vr-mode-ui="enabled: false"
+    loading-screen="enabled: false"
+    fog="type: linear; color: #ffc59a; near: 25; far: 80">
+
+    <!-- Luces sencillas, sin sombras -->
+    <a-entity light="type: hemisphere; color: #dff1ff; groundColor: #a86b3c; intensity: 1.1"></a-entity>
+    <a-entity light="type: directional; color: #fff4e6; intensity: 1.2" position="0.6 1 0.4"></a-entity>
+
+    <a-entity cielo-degradado></a-entity>
+    <a-entity mundo-bloques></a-entity>
+
+    <!-- La partida: reloj y fin, monedas y zombis -->
+    <a-entity partida monedas zombis animales bolas sonido copa-y-dragon></a-entity>
+
+    <!-- Pepe: el "rig" que se mueve, con la cabeza (y el marcador del cielo) y las dos manos -->
+    <a-entity id="pepe" movimiento-pepe position="32 8 32">
+      <a-entity id="cabeza" camera position="0 1.6 0" marcador
+        look-controls="pointerLockEnabled: true; magicWindowTrackingEnabled: false"></a-entity>
+      <a-entity id="manoIzq">
+        <a-box width="0.06" height="0.04" depth="0.12" color="#f2c6a0"></a-box>
+      </a-entity>
+      <a-entity id="manoDer" herramientas>
+        <a-box width="0.06" height="0.04" depth="0.12" color="#f2c6a0"></a-box>
+      </a-entity>
+    </a-entity>
+  </a-scene>
+
+  <script>
+    // Si A-Frame no ha llegado de internet, el juego no puede arrancar: lo avisamos en la tarjeta
+    if (!window.AFRAME) {
+      document.querySelectorAll('#inicio button').forEach(b => { b.disabled = true; });
+      document.getElementById('nota-vr').textContent = 'No se ha podido cargar el motor 3D. Revisa la conexión a internet y recarga la página.';
+    }
+  </script>
+
+  <script>
+    /* =========================================================
+       7. PANTALLA DE INICIO Y BOTONES
+       ========================================================= */
+    const escena = document.getElementById('escena');
+    const inicio = document.getElementById('inicio');
+    const ayuda = document.getElementById('ayuda');
+    const avisoRaton = document.getElementById('aviso-raton');
+    const btnVR = document.getElementById('btn-vr');
+
+    // Mandos de las gafas: usamos meta-touch-controls (o el nombre antiguo si no existe).
+    // model: false para no descargar modelos de internet; dibujamos una cajita como mano.
+    const mandos = AFRAME.components['meta-touch-controls'] ? 'meta-touch-controls' : 'oculus-touch-controls';
+    document.getElementById('manoIzq').setAttribute(mandos, { hand: 'left', model: false });
+    document.getElementById('manoDer').setAttribute(mandos, { hand: 'right', model: false });
+
+    // Convierte segundos en "m:ss"
+    document.getElementById('mejor-tiempo').textContent = formatoTiempo(estado.mejorTiempo);
+
+    function empezarPartida(modo) {
+      estado.modo = modo;
+      estado.jugando = true;
+      inicio.classList.add('oculto');
+      // Volvemos a poner a Pepe mirando al frente en el centro
+      const rig = document.getElementById('pepe').object3D;
+      rig.rotation.y = 0;
+      rig.position.set(TAM / 2, Mundo.alturaSuelo(TAM / 2, TAM / 2), TAM / 2);
+      // Las cajitas de las manos solo se ven en VR
+      document.querySelectorAll('#manoIzq > a-box, #manoDer > a-box').forEach(c => { c.object3D.visible = modo === 'vr'; });
+      nuevaPartida();
+    }
+
+    // Volver a jugar desde el panel de fin de partida
+    function volverAJugar() {
+      if (!estado.fin) return;
+      if (estado.fin === 'perdido') mundoNuevo();  // al perder, paisaje totalmente nuevo
+      if (estado.modo === 'vr') empezarPartida('vr');
+      else jugarOrdenador();
+    }
+    document.getElementById('btn-otra').addEventListener('click', e => {
+      e.stopPropagation();
+      volverAJugar();
+    });
+    // En VR: botón A (en "mandos-xr") o gatillo derecho (esperamos 1 s para no reiniciar sin querer)
+    function volverAJugarVR() {
+      // setTimeout: así esta misma pulsación de A no cuenta además como salto en la partida nueva
+      if (estado.fin && estado.modo === 'vr' && performance.now() - estado.finEn > 1000) setTimeout(volverAJugar, 0);
+    }
+    document.getElementById('manoDer').addEventListener('triggerdown', volverAJugarVR);
+
+    // Mando derecho leído directamente de WebXR, en cada fotograma.
+    // Así A, B y la posición de la mano funcionan aunque A-Frame no haya enganchado bien ese mando.
+    AFRAME.registerComponent('mandos-xr', {
+      init() {
+        this.mano = document.getElementById('manoDer');
+        this.antes = { a: false, b: false };  // para detectar el momento justo en que se pulsa
+      },
+      tick() {
+        const sesion = this.el.sceneEl.xrSession;
+        if (!sesion || estado.modo !== 'vr') return;
+        const xr = this.el.sceneEl.renderer.xr;
+        for (const fuente of sesion.inputSources) {
+          if (fuente.handedness !== 'right' || !fuente.gamepad) continue;
+          const botones = fuente.gamepad.buttons;
+          const a = !!(botones[4] && botones[4].pressed);  // botón A
+          const b = !!(botones[5] && botones[5].pressed);  // botón B
+          if (a && !this.antes.a) {
+            if (estado.fin) volverAJugarVR();
+            else Juego.movimiento.saltar();
+          }
+          if (b && !this.antes.b) this.mano.components.herramientas.cambiar();
+          this.antes.a = a; this.antes.b = b;
+
+          // Plan B para la posición: si A-Frame no mueve la mano, la movemos nosotros
+          const seguimiento = this.mano.components['tracked-controls'];
+          const frame = xr.getFrame(), espacio = xr.getReferenceSpace();
+          if (!(seguimiento && seguimiento.controller) && frame && espacio && fuente.gripSpace) {
+            const pose = frame.getPose(fuente.gripSpace, espacio);
+            if (pose) {
+              this.mano.object3D.position.copy(pose.transform.position);
+              this.mano.object3D.quaternion.copy(pose.transform.orientation);
+            }
+          }
+        }
+      }
+    });
+    escena.setAttribute('mandos-xr', '');
+
+    // Jugar en el ordenador: bloqueamos el puntero para mirar con el ratón
+    function jugarOrdenador() {
+      Sonido.iniciar();  // el audio arranca con esta acción de la persona
+      empezarPartida('ordenador');
+      ayuda.style.display = 'block';
+      escena.canvas.requestPointerLock();
+    }
+    document.getElementById('btn-ordenador').addEventListener('click', e => {
+      e.stopPropagation();
+      jugarOrdenador();
+    });
+
+    // Intro también empieza a jugar (preventDefault evita que pulse otro botón a la vez)
+    window.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !inicio.classList.contains('oculto')) {
+        e.preventDefault();
+        jugarOrdenador();
+      } else if (e.key === 'Enter' && estado.fin && estado.modo === 'ordenador') {
+        e.preventDefault();  // así no se pulsa además el botón que tenga el foco
+        volverAJugar();
+      }
+    });
+
+    // Aviso cuando se suelta el ratón con Esc
+    document.addEventListener('pointerlockchange', () => {
+      const libre = !document.pointerLockElement;
+      avisoRaton.style.display = (libre && estado.jugando && estado.modo === 'ordenador') ? 'block' : 'none';
+    });
+
+    // Realidad virtual: solo si el navegador la permite
+    btnVR.addEventListener('click', e => {
+      e.stopPropagation();
+      Sonido.iniciar();
+      const intento = escena.enterVR();
+      // Si las gafas no dejan entrar, lo explicamos en la tarjeta en vez de no hacer nada
+      if (intento && intento.catch) intento.catch(() => {
+        document.getElementById('nota-vr').textContent = 'No se ha podido entrar en realidad virtual. Ábrelo en el navegador de las gafas, desde una dirección https, y vuelve a probar.';
+      });
+    });
+
+    // Botón de sonido: silencia o activa la música y los efectos
+    const btnSonido = document.getElementById('btn-sonido');
+    btnSonido.addEventListener('click', e => {
+      e.stopPropagation();
+      Sonido.iniciar();
+      Sonido.cambiar();
+      btnSonido.textContent = Sonido.activado ? 'Sonido: sí' : 'Sonido: no';
+    });
+
+    // Mundo nuevo: borra el guardado (bloques rotos y récord) y crea un terreno con semilla nueva
+    document.getElementById('btn-nuevo').addEventListener('click', e => {
+      e.stopPropagation();
+      try { localStorage.removeItem(CLAVE_GUARDADO); } catch (err) { /* sin guardado, da igual */ }
+      estado.mejorTiempo = null;
+      mundoNuevo();
+      if (Juego.animales) Juego.animales.repartir();
+      document.getElementById('mejor-tiempo').textContent = formatoTiempo(null);
+      document.getElementById('nota-vr').textContent = 'Mundo nuevo creado. Pulsa Intro para jugar en el ordenador.';
+    });
+    function sinVR() {
+      btnVR.disabled = true;
+      // Sin https el navegador esconde la realidad virtual: lo decimos para que se sepa cómo arreglarlo
+      btnVR.textContent = window.isSecureContext ? 'Realidad virtual no disponible aquí' : 'Realidad virtual: necesita https';
+    }
+    if (navigator.xr && navigator.xr.isSessionSupported) {
+      navigator.xr.isSessionSupported('immersive-vr').then(ok => { if (!ok) sinVR(); }).catch(sinVR);
+    } else {
+      sinVR();
+    }
+
+    escena.addEventListener('enter-vr', () => {
+      if (!escena.is('vr-mode')) return;
+      ayuda.style.display = 'none';
+      avisoRaton.style.display = 'none';
+      Sonido.iniciar();
+      empezarPartida('vr');
+    });
+    escena.addEventListener('exit-vr', () => {
+      if (estado.fin === 'perdido') mundoNuevo();  // si salió tras perder, la próxima partida también es en un paisaje nuevo
+      estado.jugando = false;
+      estado.modo = null;
+      estado.fin = null;
+      if (Juego.partida) Juego.partida.ocultarFin();
+      inicio.classList.remove('oculto');
+    });
+  </script>
+</body>
+</html>
